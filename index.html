@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K Finanças</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root{
+    --roxo:#8A05BE; --roxo-escuro:#5C0790; --lilas:#F6EEFB; --lilas-borda:#EBDDF6;
+    --fundo:#FBF9FD; --card:#FFFFFF; --texto:#241A33; --texto-2:#6E6480;
+    --verde:#12A454; --amarelo:#D99000; --vermelho:#E5484D;
+    --raio:16px; --sombra:0 1px 3px rgba(36,26,51,.06), 0 6px 20px rgba(138,5,190,.05);
+  }
+  *{box-sizing:border-box; margin:0}
+  body{font-family:'Inter',sans-serif; background:var(--fundo); color:var(--texto); font-size:15px; line-height:1.5}
+  h1,h2,h3{font-family:'Manrope',sans-serif}
+  button{font-family:inherit; cursor:pointer}
+  input,select{font-family:inherit; font-size:14px; padding:9px 12px; border:1px solid var(--lilas-borda); border-radius:10px; background:#fff; color:var(--texto); outline-color:var(--roxo)}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* ---------- Login ---------- */
+  #login{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px}
+  .login-card{background:var(--card); border-radius:24px; box-shadow:var(--sombra); padding:44px 40px; width:100%; max-width:380px; text-align:center}
+  .marca{width:56px; height:56px; border-radius:18px; background:var(--roxo); color:#fff; font-family:'Manrope'; font-weight:800; font-size:26px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px}
+  .login-card h1{font-size:22px; font-weight:800; margin-bottom:4px}
+  .login-card p{color:var(--texto-2); font-size:14px; margin-bottom:24px}
+  .login-card input{width:100%; margin-bottom:12px}
+  .btn{background:var(--roxo); color:#fff; border:none; border-radius:12px; padding:11px 20px; font-weight:600; font-size:14px; transition:background .15s}
+  .btn:hover{background:var(--roxo-escuro)}
+  .btn-claro{background:var(--lilas); color:var(--roxo)}
+  .btn-claro:hover{background:var(--lilas-borda)}
+  .login-card .btn{width:100%}
+  #login-erro{color:var(--vermelho); font-size:13px; margin-top:10px; min-height:18px}
+
+  /* ---------- Estrutura ---------- */
+  header{background:var(--card); border-bottom:1px solid var(--lilas-borda); position:sticky; top:0; z-index:5}
+  .topo{max-width:1100px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; gap:16px}
+  .topo .marca{width:38px; height:38px; font-size:18px; border-radius:12px; margin:0}
+  .topo h1{font-size:17px; font-weight:800}
+  nav{max-width:1100px; margin:0 auto; padding:0 24px; display:flex; gap:4px; overflow-x:auto}
+  nav button{background:none; border:none; padding:10px 14px; font-size:14px; font-weight:500; color:var(--texto-2); border-bottom:2.5px solid transparent; white-space:nowrap}
+  nav button.ativo{color:var(--roxo); font-weight:600; border-bottom-color:var(--roxo)}
+  #sair{margin-left:auto; background:none; border:none; color:var(--texto-2); font-size:13px}
+  #sair:hover{color:var(--roxo)}
+  main{max-width:1100px; margin:0 auto; padding:28px 24px 64px}
+  .aba{display:none}
+  .aba.ativa{display:block}
+  .titulo-aba{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:20px}
+  .titulo-aba h2{font-size:21px; font-weight:800}
+
+  /* ---------- Componentes ---------- */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin-bottom:24px}
+  .card{background:var(--card); border-radius:var(--raio); box-shadow:var(--sombra); padding:18px 20px}
+  .card .rotulo{font-size:12.5px; color:var(--texto-2); margin-bottom:6px}
+  .card .valor{font-family:'Manrope'; font-size:22px; font-weight:800}
+  .verde{color:var(--verde)} .vermelho{color:var(--vermelho)} .roxo{color:var(--roxo)}
+  .painel{background:var(--card); border-radius:var(--raio); box-shadow:var(--sombra); padding:22px; margin-bottom:20px}
+  .painel h3{font-size:15px; font-weight:700; margin-bottom:14px}
+  .grade-2{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  @media(max-width:800px){.grade-2{grid-template-columns:1fr}}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th{text-align:left; color:var(--texto-2); font-weight:500; font-size:12.5px; padding:8px 10px; border-bottom:1px solid var(--lilas-borda)}
+  td{padding:10px; border-bottom:1px solid #F3EEF8}
+  tr:last-child td{border-bottom:none}
+  td.dir, th.dir{text-align:right}
+  .pilula{display:inline-block; background:var(--lilas); color:var(--roxo); font-size:12px; font-weight:600; padding:3px 10px; border-radius:99px}
+  .seletor{display:inline-flex; background:var(--lilas); border-radius:12px; padding:3px}
+  .seletor button{border:none; background:none; padding:7px 16px; border-radius:9px; font-size:13.5px; font-weight:600; color:var(--texto-2)}
+  .seletor button.ativo{background:#fff; color:var(--roxo); box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .nav-periodo{display:flex; align-items:center; gap:10px}
+  .seta{border:1px solid var(--lilas-borda); background:#fff; width:32px; height:32px; border-radius:10px; font-size:15px; color:var(--roxo)}
+  #rotulo-periodo{font-weight:700; font-family:'Manrope'; min-width:150px; text-align:center}
+  .barra-fundo{background:var(--lilas); height:8px; border-radius:99px; overflow:hidden; margin-top:6px}
+  .barra{height:100%; border-radius:99px; transition:width .3s}
+  .acao{background:none; border:none; font-size:15px; padding:4px}
+  .vazio{color:var(--texto-2); text-align:center; padding:28px 12px; font-size:14px}
+  .form-linha{display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:14px}
+  .campo{display:flex; flex-direction:column; gap:4px}
+  .campo label{font-size:12px; color:var(--texto-2); font-weight:500}
+
+  /* ---------- 50/30/20 ---------- */
+  .faixa-503020{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px}
+  .grupo-503020{border:1.5px solid var(--lilas-borda); border-radius:var(--raio); padding:16px 18px}
+  .grupo-503020 .nome{font-weight:700; font-size:14px}
+  .grupo-503020 .meta{font-size:12.5px; color:var(--texto-2); margin-bottom:8px}
+
+  /* ---------- Modal ---------- */
+  #modal-fundo{display:none; position:fixed; inset:0; background:rgba(36,26,51,.45); z-index:20; align-items:center; justify-content:center; padding:20px}
+  #modal-fundo.aberto{display:flex}
+  #modal{background:#fff; border-radius:20px; padding:26px; width:100%; max-width:440px; max-height:90vh; overflow:auto}
+  #modal h3{font-size:17px; font-weight:800; margin-bottom:16px}
+  #modal .campo{margin-bottom:12px}
+  #modal input, #modal select{width:100%}
+  .modal-acoes{display:flex; gap:10px; justify-content:flex-end; margin-top:18px}
+  canvas{max-height:290px}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login">
+  <div class="login-card">
+    <div class="marca">K</div>
+    <h1>K Finanças</h1>
+    <p>Entre para ver suas finanças.</p>
+    <input type="email" id="login-email" placeholder="Seu e-mail" autocomplete="username">
+    <input type="password" id="login-senha" placeholder="Sua senha" autocomplete="current-password">
+    <button class="btn" onclick="entrar()">Entrar</button>
+    <div id="login-erro"></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" style="display:none">
+  <header>
+    <div class="topo">
+      <div class="marca">K</div>
+      <h1>K Finanças</h1>
+      <button id="sair" onclick="sair()">Sair</button>
+    </div>
+    <nav id="nav">
+      <button data-aba="dashboard" class="ativo">Dashboard</button>
+      <button data-aba="lancamentos">Lançamentos</button>
+      <button data-aba="faturas">Cartões e Faturas</button>
+      <button data-aba="contas">Contas e Saldos</button>
+      <button data-aba="orcamento">Orçamento</button>
+      <button data-aba="investimentos">Investimentos</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ========== DASHBOARD ========== -->
+    <section class="aba ativa" id="aba-dashboard">
+      <div class="titulo-aba">
+        <h2>Visão geral</h2>
+        <div class="nav-periodo">
+          <div class="seletor" id="tipo-periodo">
+            <button data-t="semana">Semana</button>
+            <button data-t="mes" class="ativo">Mês</button>
+            <button data-t="ano">Ano</button>
+          </div>
+          <button class="seta" onclick="mudarPeriodo(-1)">‹</button>
+          <span id="rotulo-periodo" class="num"></span>
+          <button class="seta" onclick="mudarPeriodo(1)">›</button>
+        </div>
+      </div>
+      <div class="cards" id="kpis"></div>
+      <div class="grade-2">
+        <div class="painel"><h3>Gastos por categoria</h3><canvas id="g-pizza"></canvas></div>
+        <div class="painel"><h3>Receitas × Gastos</h3><canvas id="g-barras"></canvas></div>
+      </div>
+      <div class="painel"><h3>Saldo acumulado no período</h3><canvas id="g-linha"></canvas></div>
+    </section>
+
+    <!-- ========== LANÇAMENTOS ========== -->
+    <section class="aba" id="aba-lancamentos">
+      <div class="titulo-aba">
+        <h2>Lançamentos</h2>
+        <button class="btn" onclick="abrirModal()">+ Novo lançamento</button>
+      </div>
+      <div class="painel">
+        <div class="form-linha">
+          <div class="campo"><label>Mês</label><input type="month" id="f-mes" onchange="renderLanc()"></div>
+          <div class="campo"><label>Tipo</label><select id="f-tipo" onchange="renderLanc()"><option value="">Todos</option><option value="receita">Receita</option><option value="despesa">Despesa</option></select></div>
+          <div class="campo"><label>Categoria</label><select id="f-cat" onchange="renderLanc()"><option value="">Todas</option></select></div>
+          <div class="campo"><label>Buscar</label><input type="text" id="f-busca" placeholder="Descrição..." oninput="renderLanc()"></div>
+        </div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Onde</th><th class="dir">Valor</th><th></th></tr></thead>
+          <tbody id="tabela-lanc"></tbody>
+        </table></div>
+      </div>
+      <p style="color:var(--texto-2); font-size:13px">Parcelas de compras parceladas não aparecem aqui — elas ficam projetadas em <b>Cartões e Faturas</b>.</p>
+    </section>
+
+    <!-- ========== FATURAS ========== -->
+    <section class="aba" id="aba-faturas">
+      <div class="titulo-aba"><h2>Cartões e faturas</h2></div>
+      <div id="lista-faturas"></div>
+    </section>
+
+    <!-- ========== CONTAS ========== -->
+    <section class="aba" id="aba-contas">
+      <div class="titulo-aba"><h2>Contas e saldos</h2></div>
+      <div class="cards" id="lista-contas"></div>
+      <p style="color:var(--texto-2); font-size:13px">Saldo = saldo inicial + receitas − despesas pagas pela conta (pix, débito, dinheiro e pagamento de fatura). Compras no crédito não mexem no saldo até a fatura ser paga.</p>
+    </section>
+
+    <!-- ========== ORÇAMENTO ========== -->
+    <section class="aba" id="aba-orcamento">
+      <div class="titulo-aba">
+        <h2>Orçamento</h2>
+        <div class="campo"><label>Mês</label><input type="month" id="orc-mes" onchange="renderOrcamento()"></div>
+      </div>
+      <div class="painel">
+        <h3>Regra 50 · 30 · 20 <span class="pilula" id="base-503020"></span></h3>
+        <div class="faixa-503020" id="faixa-503020"></div>
+      </div>
+      <div class="painel">
+        <h3>Planejado × realizado por categoria</h3>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Categoria</th><th>Planejado (R$)</th><th class="dir">Gasto</th><th style="width:32%">Quanto já usei</th></tr></thead>
+          <tbody id="tabela-orc"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- ========== INVESTIMENTOS ========== -->
+    <section class="aba" id="aba-investimentos">
+      <div class="titulo-aba"><h2>Investimentos</h2></div>
+      <div class="cards" id="kpis-inv"></div>
+      <div class="painel"><h3>Evolução do patrimônio</h3><canvas id="g-patrimonio"></canvas></div>
+      <div class="grade-2">
+        <div class="painel">
+          <h3>Registrar aporte</h3>
+          <div class="form-linha">
+            <div class="campo"><label>Data</label><input type="date" id="ap-data"></div>
+            <div class="campo"><label>Instituição</label><input id="ap-inst" placeholder="BTG, XP..." style="width:110px"></div>
+            <div class="campo"><label>Tipo</label><input id="ap-tipo" placeholder="CDB, Tesouro..." style="width:110px"></div>
+            <div class="campo"><label>Valor</label><input type="number" step="0.01" id="ap-valor" style="width:110px"></div>
+            <button class="btn" onclick="salvarAporte()">Salvar</button>
+          </div>
+          <div style="overflow-x:auto"><table><tbody id="tabela-aportes"></tbody></table></div>
+        </div>
+        <div class="painel">
+          <h3>Registrar patrimônio do mês</h3>
+          <p style="font-size:13px; color:var(--texto-2); margin-bottom:12px">No fim de cada mês, anote quanto você tem em cada instituição. É isso que desenha o gráfico.</p>
+          <div class="form-linha">
+            <div class="campo"><label>Data</label><input type="date" id="pt-data"></div>
+            <div class="campo"><label>Instituição</label><input id="pt-inst" placeholder="BTG" style="width:110px"></div>
+            <div class="campo"><label>Valor atual</label><input type="number" step="0.01" id="pt-valor" style="width:120px"></div>
+            <button class="btn" onclick="salvarPatrimonio()">Salvar</button>
+          </div>
+          <h3 style="margin-top:10px">CDI do mês (manual)</h3>
+          <div class="form-linha">
+            <div class="campo"><label>Mês</label><input type="month" id="cdi-mes"></div>
+            <div class="campo"><label>Taxa % no mês</label><input type="number" step="0.0001" id="cdi-taxa" placeholder="ex.: 0.95" style="width:110px"></div>
+            <button class="btn btn-claro" onclick="salvarCDI()">Salvar CDI</button>
+          </div>
+        </div>
+      </div>
+      <div class="painel">
+        <h3>Minha rentabilidade × CDI</h3>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Mês</th><th class="dir">Patrimônio</th><th class="dir">Aportes</th><th class="dir">Rendi (%)</th><th class="dir">CDI (%)</th></tr></thead>
+          <tbody id="tabela-rent"></tbody>
+        </table></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= MODAL ================= -->
+<div id="modal-fundo">
+  <div id="modal">
+    <h3 id="modal-titulo">Novo lançamento</h3>
+    <input type="hidden" id="m-id">
+    <div class="campo"><label>Data</label><input type="date" id="m-data"></div>
+    <div class="campo"><label>Descrição</label><input id="m-desc" placeholder="Ex.: Mercado da semana"></div>
+    <div class="campo"><label>Tipo</label><select id="m-tipo" onchange="preencherCategorias()"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+    <div class="campo"><label>Categoria</label><select id="m-cat" onchange="preencherSubcategorias()"></select></div>
+    <div class="campo"><label>Subcategoria</label><select id="m-sub"></select></div>
+    <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" id="m-valor"></div>
+    <div class="campo"><label>Forma de pagamento</label><select id="m-forma"><option>pix</option><option>débito</option><option>crédito</option><option>dinheiro</option></select></div>
+    <div class="campo"><label>Conta ou cartão</label><select id="m-onde"></select></div>
+    <div class="campo"><label>Fixo ou variável?</label><select id="m-fixo"><option value="variavel">Variável</option><option value="fixo">Fixo</option></select></div>
+    <div class="modal-acoes">
+      <button class="btn btn-claro" onclick="fecharModal()">Cancelar</button>
+      <button class="btn" onclick="salvarLancamento()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIGURAÇÃO — as 2 únicas linhas que você precisa editar!
+   Cole aqui a URL do projeto e a chave PÚBLICA (anon) do Supabase.
+   (A chave anon é feita para ficar no site; a secreta NUNCA vai aqui.)
+   ============================================================ */
+const SUPABASE_URL  = "https://jxjfqtbsyliyrjayciwy.supabase.co/rest/v1/";
+const SUPABASE_ANON = "sb_publishable_rtJibZzvW_ZrHA8R94r3IA_TVv1NaOh";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+/* ---------------- Estado ---------------- */
+let DB = {};                 // todas as tabelas carregadas
+let CAT = {}, SUB = {}, CONTA = {}, CARTAO = {};
+let periodo = { tipo: "mes", desloc: 0 };
+let charts = {};
+
+/* ---------------- Ajudantes ---------------- */
+const R$ = v => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const pD = s => new Date(s + "T12:00:00");
+const iso = d => d.toISOString().slice(0, 10);
+const dBR = s => { const [a,m,d] = s.split("-"); return `${d}/${m}/${a}`; };
+const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const mesBR = s => MESES[+s.slice(5,7)-1] + "/" + s.slice(2,4);
+const CORES = ["#8A05BE","#B15CE0","#5C0790","#D9A9F0","#7C4DFF","#E75CA8","#F0A25C","#5CC2E7","#12A454","#E5484D","#8E8399"];
+
+function el(id){ return document.getElementById(id); }
+
+/* ---------------- Login ---------------- */
+async function entrar(){
+  el("login-erro").textContent = "";
+  const { error } = await sb.auth.signInWithPassword({
+    email: el("login-email").value.trim(),
+    password: el("login-senha").value,
+  });
+  if (error) { el("login-erro").textContent = "E-mail ou senha incorretos. Tente de novo."; return; }
+  iniciarApp();
+}
+async function sair(){ await sb.auth.signOut(); location.reload(); }
+el("login-senha").addEventListener("keydown", e => { if (e.key === "Enter") entrar(); });
+
+/* ---------------- Carregamento ---------------- */
+async function carregarTudo(){
+  const q = (t, sel="*", ord="id") => sb.from(t).select(sel).order(ord);
+  const [contas, cartoes, cats, subs, lanc, compras, parc, orc, ap, pat, cdi] = await Promise.all([
+    q("contas"), q("cartoes"), q("categorias"), q("subcategorias"),
+    sb.from("lancamentos").select("*").order("data", { ascending:false }).order("id", { ascending:false }),
+    q("compras_parceladas"), sb.from("parcelas").select("*").order("vencimento"),
+    q("orcamentos"), sb.from("aportes").select("*").order("data", {ascending:false}),
+    sb.from("patrimonio").select("*").order("data"), sb.from("cdi_mensal").select("*").order("mes"),
+  ]);
+  DB = { contas: contas.data??[], cartoes: cartoes.data??[], categorias: cats.data??[],
+         subcategorias: subs.data??[], lancamentos: lanc.data??[], compras: compras.data??[],
+         parcelas: parc.data??[], orcamentos: orc.data??[], aportes: ap.data??[],
+         patrimonio: pat.data??[], cdi: cdi.data??[] };
+  CAT = Object.fromEntries(DB.categorias.map(c=>[c.id,c]));
+  SUB = Object.fromEntries(DB.subcategorias.map(s=>[s.id,s]));
+  CONTA = Object.fromEntries(DB.contas.map(c=>[c.id,c]));
+  CARTAO = Object.fromEntries(DB.cartoes.map(c=>[c.id,c]));
+}
+
+/* Gastos "de verdade": despesas exceto pagamento de fatura, + parcelas projetadas */
+function itensGasto(){
+  const compraDe = Object.fromEntries(DB.compras.map(c=>[c.id,c]));
+  const lanc = DB.lancamentos
+    .filter(l => l.tipo==="despesa" && CAT[l.categoria_id]?.nome !== "Cartão de Crédito")
+    .map(l => ({ data:l.data, valor:+l.valor, categoria_id:l.categoria_id }));
+  const parc = DB.parcelas.map(p => ({
+    data: p.vencimento, valor:+p.valor,
+    categoria_id: compraDe[p.compra_id]?.categoria_id ?? null,
+  }));
+  return lanc.concat(parc);
+}
+const itensReceita = () => DB.lancamentos.filter(l=>l.tipo==="receita")
+  .map(l=>({data:l.data, valor:+l.valor}));
+
+/* Em qual fatura cai uma compra à vista no crédito */
+function vencFatura(dataISO, cartao){
+  const d = pD(dataISO);
+  let m = d.getMonth() + (d.getDate() > cartao.dia_fechamento ? 1 : 0);
+  return iso(new Date(d.getFullYear(), m, cartao.dia_vencimento));
+}
+
+/* ---------------- Períodos ---------------- */
+function faixa(tipo, desloc){
+  const hoje = new Date();
+  if (tipo === "semana"){
+    const seg = new Date(hoje); seg.setDate(hoje.getDate() - ((hoje.getDay()+6)%7) + desloc*7);
+    const dom = new Date(seg); dom.setDate(seg.getDate()+6);
+    return { ini: iso(seg), fim: iso(dom), rotulo: `${dBR(iso(seg)).slice(0,5)} – ${dBR(iso(dom)).slice(0,5)}` };
+  }
+  if (tipo === "mes"){
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth()+desloc, 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth()+desloc+1, 0);
+    return { ini: iso(ini), fim: iso(fim), rotulo: mesBR(iso(ini)) };
+  }
+  const ano = hoje.getFullYear()+desloc;
+  return { ini: `${ano}-01-01`, fim: `${ano}-12-31`, rotulo: String(ano) };
+}
+const noPeriodo = (item, f) => item.data >= f.ini && item.data <= f.fim;
+function mudarPeriodo(n){ periodo.desloc += n; renderDashboard(); }
+el("tipo-periodo").addEventListener("click", e => {
+  if (!e.target.dataset.t) return;
+  periodo = { tipo: e.target.dataset.t, desloc: 0 };
+  el("tipo-periodo").querySelectorAll("button").forEach(b=>b.classList.toggle("ativo", b===e.target));
+  renderDashboard();
+});
+
+/* ---------------- Dashboard ---------------- */
+function novoChart(id, cfg){
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(el(id), cfg);
+}
+function renderDashboard(){
+  const f = faixa(periodo.tipo, periodo.desloc);
+  el("rotulo-periodo").textContent = f.rotulo;
+
+  const gastos = itensGasto(), receitas = itensReceita();
+  const gPer = gastos.filter(i=>noPeriodo(i,f));
+  const rPer = receitas.filter(i=>noPeriodo(i,f));
+  const totG = gPer.reduce((s,i)=>s+i.valor,0);
+  const totR = rPer.reduce((s,i)=>s+i.valor,0);
+
+  // Comprometido em faturas futuras (a partir de hoje)
+  const hoje = iso(new Date());
+  let comprometido = DB.parcelas.filter(p=>p.vencimento>hoje).reduce((s,p)=>s+ +p.valor,0);
+  DB.lancamentos.filter(l=>l.cartao_id && l.forma_pagamento?.startsWith("cr")).forEach(l=>{
+    if (vencFatura(l.data, CARTAO[l.cartao_id]) > hoje) comprometido += +l.valor;
+  });
+
+  // Posso gastar (só no modo mês): orçado do mês − gasto do mês
+  const mesAtual = f.ini.slice(0,7);
+  const orcado = DB.orcamentos.filter(o=>o.mes.slice(0,7)===mesAtual).reduce((s,o)=>s+ +o.valor_planejado,0);
+  const possoGastar = orcado - totG;
+
+  el("kpis").innerHTML = `
+    <div class="card"><div class="rotulo">Receitas</div><div class="valor num verde">${R$(totR)}</div></div>
+    <div class="card"><div class="rotulo">Gastos</div><div class="valor num vermelho">${R$(totG)}</div></div>
+    <div class="card"><div class="rotulo">Saldo do período</div><div class="valor num ${totR-totG>=0?"verde":"vermelho"}">${R$(totR-totG)}</div></div>
+    ${periodo.tipo==="mes" && orcado>0 ? `<div class="card"><div class="rotulo">Ainda posso gastar</div><div class="valor num ${possoGastar>=0?"roxo":"vermelho"}">${R$(possoGastar)}</div></div>` : ""}
+    <div class="card"><div class="rotulo">Comprometido em faturas futuras</div><div class="valor num roxo">${R$(comprometido)}</div></div>`;
+
+  // Pizza por categoria
+  const porCat = {};
+  gPer.forEach(i=>{ const n = CAT[i.categoria_id]?.nome ?? "Sem categoria"; porCat[n]=(porCat[n]||0)+i.valor; });
+  const nomes = Object.keys(porCat);
+  novoChart("g-pizza", { type:"doughnut",
+    data:{ labels:nomes, datasets:[{ data:nomes.map(n=>porCat[n]), backgroundColor:CORES, borderWidth:2, borderColor:"#fff" }]},
+    options:{ plugins:{ legend:{ position:"right" }}, cutout:"62%" }});
+
+  // Barras: 6 períodos
+  const rot=[], rr=[], gg=[];
+  for (let k=5;k>=0;k--){
+    const fk = faixa(periodo.tipo, periodo.desloc-k);
+    rot.push(fk.rotulo);
+    rr.push(receitas.filter(i=>noPeriodo(i,fk)).reduce((s,i)=>s+i.valor,0));
+    gg.push(gastos.filter(i=>noPeriodo(i,fk)).reduce((s,i)=>s+i.valor,0));
+  }
+  novoChart("g-barras", { type:"bar",
+    data:{ labels:rot, datasets:[
+      { label:"Receitas", data:rr, backgroundColor:"#12A454", borderRadius:6 },
+      { label:"Gastos", data:gg, backgroundColor:"#8A05BE", borderRadius:6 }]},
+    options:{ plugins:{ legend:{ position:"bottom" }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
+
+  // Linha: saldo acumulado dia a dia dentro do período
+  const porDia = {};
+  rPer.forEach(i=>porDia[i.data]=(porDia[i.data]||0)+i.valor);
+  gPer.forEach(i=>porDia[i.data]=(porDia[i.data]||0)-i.valor);
+  const dias = Object.keys(porDia).sort();
+  let acum = 0; const serie = dias.map(d=>({ x:dBR(d).slice(0,5), y:(acum+=porDia[d]) }));
+  novoChart("g-linha", { type:"line",
+    data:{ labels:serie.map(p=>p.x), datasets:[{ label:"Saldo acumulado", data:serie.map(p=>p.y),
+      borderColor:"#8A05BE", backgroundColor:"rgba(138,5,190,.08)", fill:true, tension:.35, pointRadius:3 }]},
+    options:{ plugins:{ legend:{ display:false }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
+}
+
+/* ---------------- Lançamentos ---------------- */
+function renderLanc(){
+  const fmes = el("f-mes").value, ftipo = el("f-tipo").value,
+        fcat = el("f-cat").value, busca = el("f-busca").value.toLowerCase();
+  const linhas = DB.lancamentos.filter(l =>
+    (!fmes || l.data.slice(0,7)===fmes) && (!ftipo || l.tipo===ftipo) &&
+    (!fcat || String(l.categoria_id)===fcat) &&
+    (!busca || l.descricao?.toLowerCase().includes(busca)));
+  el("tabela-lanc").innerHTML = linhas.length ? linhas.map(l=>{
+    const onde = l.cartao_id ? "💳 "+(CARTAO[l.cartao_id]?.nome??"") : (CONTA[l.conta_id]?.nome??"—");
+    return `<tr>
+      <td class="num">${dBR(l.data)}</td>
+      <td>${l.descricao??""}</td>
+      <td><span class="pilula">${CAT[l.categoria_id]?.nome??"—"}</span> <span style="color:var(--texto-2);font-size:12.5px">${SUB[l.subcategoria_id]?.nome??""}</span></td>
+      <td>${onde} <span style="color:var(--texto-2);font-size:12.5px">${l.forma_pagamento??""}</span></td>
+      <td class="dir num ${l.tipo==="receita"?"verde":""}">${l.tipo==="receita"?"+":"−"} ${R$(+l.valor)}</td>
+      <td class="dir"><button class="acao" title="Editar" onclick="abrirModal(${l.id})">✏️</button><button class="acao" title="Excluir" onclick="excluirLanc(${l.id})">🗑️</button></td>
+    </tr>`; }).join("")
+    : `<tr><td colspan="6" class="vazio">Nenhum lançamento por aqui ainda. Mande um gasto pelo bot ou clique em “+ Novo lançamento”.</td></tr>`;
+}
+async function excluirLanc(id){
+  if (!confirm("Excluir este lançamento?")) return;
+  await sb.from("lancamentos").delete().eq("id", id);
+  await recarregar();
+}
+
+/* ----- Modal (novo/editar) ----- */
+function preencherCategorias(selId){
+  const tipo = el("m-tipo").value;
+  el("m-cat").innerHTML = DB.categorias.filter(c=>c.tipo===tipo)
+    .map(c=>`<option value="${c.id}" ${c.id==selId?"selected":""}>${c.nome}</option>`).join("");
+  preencherSubcategorias();
+}
+function preencherSubcategorias(selId){
+  const cid = el("m-cat").value;
+  el("m-sub").innerHTML = DB.subcategorias.filter(s=>String(s.categoria_id)===cid)
+    .map(s=>`<option value="${s.id}" ${s.id==selId?"selected":""}>${s.nome}</option>`).join("");
+}
+function preencherOnde(sel){
+  el("m-onde").innerHTML =
+    DB.contas.map(c=>`<option value="conta-${c.id}" ${sel==="conta-"+c.id?"selected":""}>Conta · ${c.nome}</option>`).join("") +
+    DB.cartoes.map(c=>`<option value="cartao-${c.id}" ${sel==="cartao-"+c.id?"selected":""}>Cartão · ${c.nome}</option>`).join("");
+}
+function abrirModal(id){
+  const l = id ? DB.lancamentos.find(x=>x.id===id) : null;
+  el("modal-titulo").textContent = l ? "Editar lançamento" : "Novo lançamento";
+  el("m-id").value = l?.id ?? "";
+  el("m-data").value = l?.data ?? iso(new Date());
+  el("m-desc").value = l?.descricao ?? "";
+  el("m-tipo").value = l?.tipo ?? "despesa";
+  el("m-valor").value = l?.valor ?? "";
+  el("m-forma").value = l?.forma_pagamento ?? "pix";
+  el("m-fixo").value = l?.fixo_variavel ?? "variavel";
+  preencherCategorias(l?.categoria_id); preencherSubcategorias(l?.subcategoria_id);
+  preencherOnde(l ? (l.cartao_id ? "cartao-"+l.cartao_id : "conta-"+l.conta_id) : "conta-"+DB.contas[0]?.id);
+  el("modal-fundo").classList.add("aberto");
+}
+function fecharModal(){ el("modal-fundo").classList.remove("aberto"); }
+async function salvarLancamento(){
+  const [tipoOnde, idOnde] = el("m-onde").value.split("-");
+  const reg = {
+    data: el("m-data").value, descricao: el("m-desc").value, tipo: el("m-tipo").value,
+    categoria_id: +el("m-cat").value || null, subcategoria_id: +el("m-sub").value || null,
+    valor: +el("m-valor").value, forma_pagamento: el("m-forma").value,
+    fixo_variavel: el("m-fixo").value,
+    conta_id: tipoOnde==="conta" ? +idOnde : null,
+    cartao_id: tipoOnde==="cartao" ? +idOnde : null,
+    origem: "painel",
+  };
+  if (!reg.valor || !reg.data){ alert("Preencha pelo menos data e valor."); return; }
+  const id = el("m-id").value;
+  const { error } = id
+    ? await sb.from("lancamentos").update(reg).eq("id", +id)
+    : await sb.from("lancamentos").insert(reg);
+  if (error){ alert("Erro ao salvar: "+error.message); return; }
+  fecharModal(); await recarregar();
+}
+
+/* ---------------- Cartões e faturas ---------------- */
+function renderFaturas(){
+  const html = DB.cartoes.map(cartao=>{
+    const fat = {}; // venc ISO -> {avista, parcelas}
+    DB.lancamentos.filter(l=>l.cartao_id===cartao.id && l.forma_pagamento?.startsWith("cr"))
+      .forEach(l=>{ const v = vencFatura(l.data, cartao); (fat[v]??={avista:0,parc:0}).avista += +l.valor; });
+    DB.parcelas.filter(p=>p.cartao_id===cartao.id)
+      .forEach(p=>{ (fat[p.vencimento]??={avista:0,parc:0}).parc += +p.valor; });
+    const mesPassado = iso(new Date(new Date().getFullYear(), new Date().getMonth()-1, 1));
+    const vencs = Object.keys(fat).filter(v=>v>=mesPassado).sort();
+    const linhas = vencs.map(v=>{
+      const t = fat[v];
+      return `<tr><td class="num">vence ${dBR(v)}</td>
+        <td class="dir num">${R$(t.avista)}</td><td class="dir num">${R$(t.parc)}</td>
+        <td class="dir num" style="font-weight:700">${R$(t.avista+t.parc)}</td></tr>`;
+    }).join("");
+    return `<div class="painel">
+      <h3>💳 ${cartao.nome} <span style="font-weight:400; color:var(--texto-2); font-size:13px">· fecha dia ${cartao.dia_fechamento} · vence dia ${cartao.dia_vencimento}</span></h3>
+      ${vencs.length ? `<table><thead><tr><th>Fatura</th><th class="dir">À vista no crédito</th><th class="dir">Parcelas</th><th class="dir">Total</th></tr></thead><tbody>${linhas}</tbody></table>`
+        : `<div class="vazio">Nenhum gasto no crédito ainda. A primeira compra no cartão aparece aqui.</div>`}
+    </div>`;
+  }).join("");
+  el("lista-faturas").innerHTML = html;
+}
+
+/* ---------------- Contas ---------------- */
+function renderContas(){
+  el("lista-contas").innerHTML = DB.contas.map(c=>{
+    const rec = DB.lancamentos.filter(l=>l.conta_id===c.id && l.tipo==="receita").reduce((s,l)=>s+ +l.valor,0);
+    const desp = DB.lancamentos.filter(l=>l.conta_id===c.id && l.tipo==="despesa").reduce((s,l)=>s+ +l.valor,0);
+    const saldo = +c.saldo_inicial + rec - desp;
+    return `<div class="card">
+      <div class="rotulo">${c.nome} <button class="acao" title="Ajustar saldo inicial" onclick="editarSaldo(${c.id})">✏️</button></div>
+      <div class="valor num ${saldo>=0?"":"vermelho"}">${R$(saldo)}</div>
+      <div style="font-size:12.5px; color:var(--texto-2); margin-top:4px" class="num">início ${R$(+c.saldo_inicial)} · +${R$(rec)} · −${R$(desp)}</div>
+    </div>`;
+  }).join("");
+}
+async function editarSaldo(id){
+  const atual = CONTA[id].saldo_inicial;
+  const novo = prompt(`Saldo inicial de ${CONTA[id].nome} (só números, ex.: 1500.50):`, atual);
+  if (novo===null || isNaN(+novo)) return;
+  await sb.from("contas").update({ saldo_inicial: +novo }).eq("id", id);
+  await recarregar();
+}
+
+/* ---------------- Orçamento ---------------- */
+function renderOrcamento(){
+  const mes = el("orc-mes").value || iso(new Date()).slice(0,7);
+  el("orc-mes").value = mes;
+  const f = { ini: mes+"-01", fim: mes+"-31" };
+  const gastos = itensGasto().filter(i=>noPeriodo(i,f));
+  const receitas = itensReceita().filter(i=>noPeriodo(i,f)).reduce((s,i)=>s+i.valor,0);
+
+  // 50/30/20 — a base é a sua renda registrada no mês
+  el("base-503020").textContent = receitas>0 ? `base: ${R$(receitas)} de renda no mês` : "registre sua renda do mês para calcular";
+  const grupos = [
+    { chave:"necessidades", nome:"Necessidades", pct:.5 },
+    { chave:"desejos", nome:"Desejos", pct:.3 },
+    { chave:"poupanca", nome:"Poupança e prioridades", pct:.2 },
+  ];
+  el("faixa-503020").innerHTML = grupos.map((g,i)=>{
+    const real = gastos.filter(x=>CAT[x.categoria_id]?.grupo_50_30_20===g.chave).reduce((s,x)=>s+x.valor,0);
+    const alvo = receitas*g.pct;
+    const pct = alvo>0 ? Math.min(real/alvo*100,100) : 0;
+    const cor = alvo===0 ? "var(--lilas-borda)" : real<=alvo*0.8 ? "var(--verde)" : real<=alvo ? "var(--amarelo)" : "var(--vermelho)";
+    return `<div class="grupo-503020">
+      <div class="nome">${Math.round(g.pct*100)}% · ${g.nome}</div>
+      <div class="meta num">${R$(real)} de ${alvo>0?R$(alvo):"—"}</div>
+      <div class="barra-fundo"><div class="barra" style="width:${pct}%; background:${cor}"></div></div>
+    </div>`;
+  }).join("");
+
+  // Planejado × realizado por categoria
+  const cats = DB.categorias.filter(c=>c.tipo==="despesa" && c.nome!=="Cartão de Crédito");
+  el("tabela-orc").innerHTML = cats.map(c=>{
+    const plan = DB.orcamentos.find(o=>o.categoria_id===c.id && o.mes.slice(0,7)===mes);
+    const vPlan = +(plan?.valor_planejado ?? 0);
+    const real = gastos.filter(x=>x.categoria_id===c.id).reduce((s,x)=>s+x.valor,0);
+    const pct = vPlan>0 ? real/vPlan*100 : 0;
+    const cor = vPlan===0 ? "var(--lilas-borda)" : pct<=80 ? "var(--verde)" : pct<=100 ? "var(--amarelo)" : "var(--vermelho)";
+    return `<tr>
+      <td>${c.nome}</td>
+      <td><input type="number" step="1" style="width:110px" value="${vPlan||""}" placeholder="0"
+        onchange="salvarOrcamento(${c.id}, '${mes}-01', this.value)"></td>
+      <td class="dir num">${R$(real)}</td>
+      <td><div class="barra-fundo"><div class="barra" style="width:${Math.min(pct,100)}%; background:${cor}"></div></div>
+        <span style="font-size:12px; color:var(--texto-2)" class="num">${vPlan>0?Math.round(pct)+"% usado":"sem plano"}</span></td>
+    </tr>`;
+  }).join("");
+}
+async function salvarOrcamento(catId, mesISO, valor){
+  await sb.from("orcamentos").upsert(
+    { categoria_id: catId, mes: mesISO, valor_planejado: +valor || 0 },
+    { onConflict: "categoria_id,mes" });
+  await recarregar("orcamento");
+}
+
+/* ---------------- Investimentos ---------------- */
+function serieMensalPatrimonio(){
+  if (!DB.patrimonio.length) return [];
+  const porInst = {};
+  DB.patrimonio.forEach(p=>{ (porInst[p.instituicao]??=[]).push(p); });
+  Object.values(porInst).forEach(a=>a.sort((x,y)=>x.data.localeCompare(y.data)));
+  const primeiro = DB.patrimonio.reduce((m,p)=>p.data<m?p.data:m, "9999").slice(0,7);
+  const meses = []; const hoje = new Date();
+  let d = new Date(+primeiro.slice(0,4), +primeiro.slice(5,7)-1, 1);
+  while (d <= hoje){ meses.push(iso(d).slice(0,7)); d = new Date(d.getFullYear(), d.getMonth()+1, 1); }
+  return meses.map(m=>{
+    let total = 0;
+    for (const inst in porInst){
+      const ate = porInst[inst].filter(p=>p.data.slice(0,7)<=m);
+      if (ate.length) total += +ate[ate.length-1].valor_atual;
+    }
+    return { mes:m, total };
+  });
+}
+function renderInvestimentos(){
+  const serie = serieMensalPatrimonio();
+  const totalAtual = serie.length ? serie[serie.length-1].total : 0;
+  const totalAportado = DB.aportes.reduce((s,a)=>s+ +a.valor,0);
+  el("kpis-inv").innerHTML = `
+    <div class="card"><div class="rotulo">Patrimônio atual</div><div class="valor num roxo">${R$(totalAtual)}</div></div>
+    <div class="card"><div class="rotulo">Total aportado</div><div class="valor num">${R$(totalAportado)}</div></div>
+    <div class="card"><div class="rotulo">Instituições</div><div class="valor num">${new Set(DB.patrimonio.map(p=>p.instituicao).concat(DB.aportes.map(a=>a.instituicao))).size}</div></div>`;
+
+  novoChart("g-patrimonio", { type:"line",
+    data:{ labels:serie.map(p=>mesBR(p.mes+"-01")), datasets:[{ label:"Patrimônio",
+      data:serie.map(p=>p.total), borderColor:"#8A05BE", backgroundColor:"rgba(138,5,190,.08)",
+      fill:true, tension:.35 }]},
+    options:{ plugins:{ legend:{ display:false }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
+
+  el("tabela-aportes").innerHTML = DB.aportes.slice(0,8).map(a=>
+    `<tr><td class="num">${dBR(a.data)}</td><td>${a.instituicao} <span style="color:var(--texto-2);font-size:12.5px">${a.tipo_ativo??""}</span></td><td class="dir num">${R$(+a.valor)}</td></tr>`
+  ).join("") || `<tr><td class="vazio">Registre seu primeiro aporte ao lado.</td></tr>`;
+
+  // Rentabilidade × CDI
+  const cdi = Object.fromEntries(DB.cdi.map(c=>[c.mes.slice(0,7), +c.taxa_percentual]));
+  const linhas = [];
+  for (let i=1;i<serie.length;i++){
+    const m = serie[i].mes, ant = serie[i-1].total, atual = serie[i].total;
+    const ap = DB.aportes.filter(a=>a.data.slice(0,7)===m).reduce((s,a)=>s+ +a.valor,0);
+    const rend = ant>0 ? ((atual-ant-ap)/ant*100) : null;
+    linhas.push(`<tr><td>${mesBR(m+"-01")}</td><td class="dir num">${R$(atual)}</td><td class="dir num">${R$(ap)}</td>
+      <td class="dir num ${rend!=null&&rend>=(cdi[m]??-999)?"verde":""}">${rend!=null?rend.toFixed(2)+"%":"—"}</td>
+      <td class="dir num">${cdi[m]!=null?cdi[m].toFixed(2)+"%":"—"}</td></tr>`);
+  }
+  el("tabela-rent").innerHTML = linhas.reverse().join("") ||
+    `<tr><td colspan="5" class="vazio">Registre o patrimônio de dois meses (e o CDI) para ver a comparação.</td></tr>`;
+}
+async function salvarAporte(){
+  const reg = { data: el("ap-data").value, instituicao: el("ap-inst").value.trim(),
+    tipo_ativo: el("ap-tipo").value.trim() || null, valor: +el("ap-valor").value };
+  if (!reg.data || !reg.instituicao || !reg.valor){ alert("Preencha data, instituição e valor."); return; }
+  await sb.from("aportes").insert(reg); await recarregar("investimentos");
+  el("ap-valor").value = "";
+}
+async function salvarPatrimonio(){
+  const reg = { data: el("pt-data").value, instituicao: el("pt-inst").value.trim(), valor_atual: +el("pt-valor").value };
+  if (!reg.data || !reg.instituicao || !reg.valor_atual){ alert("Preencha data, instituição e valor."); return; }
+  await sb.from("patrimonio").insert(reg); await recarregar("investimentos");
+  el("pt-valor").value = "";
+}
+async function salvarCDI(){
+  const mes = el("cdi-mes").value, taxa = +el("cdi-taxa").value;
+  if (!mes || !taxa){ alert("Preencha o mês e a taxa."); return; }
+  await sb.from("cdi_mensal").upsert({ mes: mes+"-01", taxa_percentual: taxa }, { onConflict:"mes" });
+  await recarregar("investimentos");
+}
+
+/* ---------------- Navegação e inicialização ---------------- */
+el("nav").addEventListener("click", e=>{
+  const aba = e.target.dataset.aba; if (!aba) return;
+  el("nav").querySelectorAll("button").forEach(b=>b.classList.toggle("ativo", b===e.target));
+  document.querySelectorAll(".aba").forEach(s=>s.classList.toggle("ativa", s.id==="aba-"+aba));
+});
+function renderTudo(){
+  renderDashboard(); renderLanc(); renderFaturas(); renderContas(); renderOrcamento(); renderInvestimentos();
+  el("f-cat").innerHTML = `<option value="">Todas</option>` +
+    DB.categorias.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("");
+}
+async function recarregar(){ await carregarTudo(); renderTudo(); }
+async function iniciarApp(){
+  el("login").style.display = "none"; el("app").style.display = "block";
+  el("f-mes").value = iso(new Date()).slice(0,7);
+  el("ap-data").value = el("pt-data").value = iso(new Date());
+  el("cdi-mes").value = iso(new Date()).slice(0,7);
+  await recarregar();
+}
+(async ()=>{
+  const { data } = await sb.auth.getSession();
+  if (data.session) iniciarApp();
+})();
+</script>
+</body>
+</html>
