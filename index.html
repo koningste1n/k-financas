@@ -13,14 +13,25 @@
   :root{
     --roxo:#8A05BE; --roxo-escuro:#5C0790; --lilas:#F6EEFB; --lilas-borda:#EBDDF6;
     --fundo:#FBF9FD; --card:#FFFFFF; --texto:#241A33; --texto-2:#6E6480;
+    --campo:#FFFFFF; --linha:#F3EEF8;
     --verde:#12A454; --amarelo:#D99000; --vermelho:#E5484D;
     --raio:16px; --sombra:0 1px 3px rgba(36,26,51,.06), 0 6px 20px rgba(138,5,190,.05);
   }
+  /* ---------- Modo noturno ---------- */
+  [data-tema="escuro"]{
+    --roxo:#B15CE0; --roxo-escuro:#C77DEB; --lilas:#2A2138; --lilas-borda:#3B2F50;
+    --fundo:#14101C; --card:#1D1729; --texto:#EDE8F6; --texto-2:#A79DB8;
+    --campo:#241D33; --linha:#2A2138;
+    --verde:#3DC97E; --amarelo:#E8B93C; --vermelho:#F0707A;
+    --sombra:0 1px 3px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.25);
+  }
+  [data-tema="escuro"] .selo-paga{background:rgba(61,201,126,.16)}
+  [data-tema="escuro"] .selo-aberta{background:rgba(240,112,122,.16)}
   *{box-sizing:border-box; margin:0}
-  body{font-family:'Inter',sans-serif; background:var(--fundo); color:var(--texto); font-size:15px; line-height:1.5}
+  body{transition:background .2s; font-family:'Inter',sans-serif; background:var(--fundo); color:var(--texto); font-size:15px; line-height:1.5}
   h1,h2,h3{font-family:'Manrope',sans-serif}
   button{font-family:inherit; cursor:pointer}
-  input,select{font-family:inherit; font-size:14px; padding:9px 12px; border:1px solid var(--lilas-borda); border-radius:10px; background:#fff; color:var(--texto); outline-color:var(--roxo)}
+  input,select{font-family:inherit; font-size:14px; padding:9px 12px; border:1px solid var(--lilas-borda); border-radius:10px; background:var(--campo); color:var(--texto); outline-color:var(--roxo)}
   .num{font-variant-numeric:tabular-nums}
 
   /* ---------- Login ---------- */
@@ -42,12 +53,36 @@
   .topo{max-width:1100px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; gap:16px}
   .topo .marca{width:38px; height:38px; font-size:18px; border-radius:12px; margin:0}
   .topo h1{font-size:17px; font-weight:800}
-  nav{max-width:1100px; margin:0 auto; padding:0 24px; display:flex; gap:4px; overflow-x:auto}
-  nav button{background:none; border:none; padding:10px 14px; font-size:14px; font-weight:500; color:var(--texto-2); border-bottom:2.5px solid transparent; white-space:nowrap}
+  nav{max-width:1100px; margin:0 auto; padding:0 16px; display:flex; flex-wrap:wrap; gap:2px}
+  nav button{background:none; border:none; padding:9px 12px; font-size:13.5px; font-weight:500; color:var(--texto-2); border-bottom:2.5px solid transparent; white-space:nowrap; display:flex; align-items:center; gap:6px}
+  nav button .ico{font-size:16px; line-height:1}
   nav button.ativo{color:var(--roxo); font-weight:600; border-bottom-color:var(--roxo)}
-  #sair{margin-left:auto; background:none; border:none; color:var(--texto-2); font-size:13px}
+  #tema-btn{margin-left:auto; background:none; border:none; font-size:18px; padding:4px}
+  #sair{background:none; border:none; color:var(--texto-2); font-size:13px}
   #sair:hover{color:var(--roxo)}
   main{max-width:1100px; margin:0 auto; padding:28px 24px 64px}
+
+  /* ---------- Celular ---------- */
+  @media(max-width:720px){
+    nav{gap:0; justify-content:space-between; padding:0 4px}
+    nav button{flex:1 1 0; min-width:58px; flex-direction:column; gap:3px; padding:8px 2px 7px; font-size:10px}
+    nav button .ico{font-size:19px}
+  }
+  @media(max-width:640px){
+    .topo{padding:12px 16px}
+    main{padding:20px 12px 56px}
+    input, select{font-size:16px} /* evita o zoom automático do iPhone */
+    .form-linha{flex-direction:column; align-items:stretch}
+    .form-linha .campo{width:100%}
+    .form-linha input, .form-linha select{width:100% !important}
+    .form-linha .btn, .form-linha .btn-claro{width:100%}
+    .titulo-aba h2{font-size:19px}
+    .card .valor{font-size:19px}
+    .painel{padding:16px}
+    #modal{padding:20px}
+    .nav-periodo{flex-wrap:wrap; justify-content:center}
+    #rotulo-periodo{min-width:110px}
+  }
   .aba{display:none}
   .aba.ativa{display:block}
   .titulo-aba{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:20px}
@@ -65,15 +100,15 @@
   @media(max-width:800px){.grade-2{grid-template-columns:1fr}}
   table{width:100%; border-collapse:collapse; font-size:14px}
   th{text-align:left; color:var(--texto-2); font-weight:500; font-size:12.5px; padding:8px 10px; border-bottom:1px solid var(--lilas-borda)}
-  td{padding:10px; border-bottom:1px solid #F3EEF8}
+  td{padding:10px; border-bottom:1px solid var(--linha)}
   tr:last-child td{border-bottom:none}
   td.dir, th.dir{text-align:right}
   .pilula{display:inline-block; background:var(--lilas); color:var(--roxo); font-size:12px; font-weight:600; padding:3px 10px; border-radius:99px}
   .seletor{display:inline-flex; background:var(--lilas); border-radius:12px; padding:3px}
   .seletor button{border:none; background:none; padding:7px 16px; border-radius:9px; font-size:13.5px; font-weight:600; color:var(--texto-2)}
-  .seletor button.ativo{background:#fff; color:var(--roxo); box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .seletor button.ativo{background:var(--card); color:var(--roxo); box-shadow:0 1px 3px rgba(0,0,0,.08)}
   .nav-periodo{display:flex; align-items:center; gap:10px}
-  .seta{border:1px solid var(--lilas-borda); background:#fff; width:32px; height:32px; border-radius:10px; font-size:15px; color:var(--roxo)}
+  .seta{border:1px solid var(--lilas-borda); background:var(--campo); width:32px; height:32px; border-radius:10px; font-size:15px; color:var(--roxo)}
   #rotulo-periodo{font-weight:700; font-family:'Manrope'; min-width:150px; text-align:center}
   .barra-fundo{background:var(--lilas); height:8px; border-radius:99px; overflow:hidden; margin-top:6px}
   .barra{height:100%; border-radius:99px; transition:width .3s}
@@ -92,7 +127,7 @@
   /* ---------- Modal ---------- */
   #modal-fundo{display:none; position:fixed; inset:0; background:rgba(36,26,51,.45); z-index:20; align-items:center; justify-content:center; padding:20px}
   #modal-fundo.aberto{display:flex}
-  #modal{background:#fff; border-radius:20px; padding:26px; width:100%; max-width:440px; max-height:90vh; overflow:auto}
+  #modal{background:var(--card); border-radius:20px; padding:26px; width:100%; max-width:440px; max-height:90vh; overflow:auto}
   #modal h3{font-size:17px; font-weight:800; margin-bottom:16px}
   #modal .campo{margin-bottom:12px}
   #modal input, #modal select{width:100%}
@@ -104,7 +139,7 @@
   .selo-paga{background:#E3F6EC; color:var(--verde)}
   .selo-aberta{background:#FDEEEF; color:var(--vermelho)}
   .selo-prevista{background:var(--lilas); color:var(--roxo)}
-  .btn-mini{border:1px solid var(--lilas-borda); background:#fff; color:var(--roxo); border-radius:9px; padding:5px 11px; font-size:12.5px; font-weight:600}
+  .btn-mini{border:1px solid var(--lilas-borda); background:var(--campo); color:var(--roxo); border-radius:9px; padding:5px 11px; font-size:12.5px; font-weight:600}
   .btn-mini:hover{background:var(--lilas)}
   .swatch{display:inline-block; width:14px; height:14px; border-radius:5px; vertical-align:-2px; margin-right:6px; border:1px solid rgba(0,0,0,.08)}
   input[type=color]{padding:2px; width:44px; height:32px; border-radius:8px; cursor:pointer}
@@ -136,18 +171,19 @@
     <div class="topo">
       <div class="marca">K</div>
       <h1>K Finanças</h1>
+      <button id="tema-btn" onclick="alternarTema()" title="Alternar modo claro/escuro">🌙</button>
       <button id="sair" onclick="sair()">Sair</button>
     </div>
     <nav id="nav">
-      <button data-aba="dashboard" class="ativo">Dashboard</button>
-      <button data-aba="lancamentos">Lançamentos</button>
-      <button data-aba="faturas">Cartões e Faturas</button>
-      <button data-aba="contas">Contas e Saldos</button>
-      <button data-aba="orcamento">Orçamento</button>
-      <button data-aba="investimentos">Investimentos</button>
-      <button data-aba="assinaturas">Assinaturas</button>
-      <button data-aba="importar">Importar extrato</button>
-      <button data-aba="config">Configurações</button>
+      <button data-aba="dashboard" class="ativo"><span class="ico">📊</span><span class="rotulo">Dashboard</span></button>
+      <button data-aba="lancamentos"><span class="ico">🧾</span><span class="rotulo">Lançamentos</span></button>
+      <button data-aba="faturas"><span class="ico">💳</span><span class="rotulo">Cartões</span></button>
+      <button data-aba="contas"><span class="ico">🏦</span><span class="rotulo">Contas</span></button>
+      <button data-aba="orcamento"><span class="ico">🎯</span><span class="rotulo">Orçamento</span></button>
+      <button data-aba="investimentos"><span class="ico">📈</span><span class="rotulo">Investir</span></button>
+      <button data-aba="assinaturas"><span class="ico">🔁</span><span class="rotulo">Assinaturas</span></button>
+      <button data-aba="importar" title="Importar extrato (CSV)"><span class="ico">📥</span></button>
+      <button data-aba="config" title="Configurações"><span class="ico">⚙️</span></button>
     </nav>
   </header>
 
@@ -440,6 +476,26 @@ const CORES = ["#8A05BE","#B15CE0","#5C0790","#D9A9F0","#7C4DFF","#E75CA8","#F0A
 
 function el(id){ return document.getElementById(id); }
 
+/* ---------------- Tema claro/escuro ---------------- */
+const temaEscuro = () => document.documentElement.dataset.tema === "escuro";
+const corCard = () => temaEscuro() ? "#1D1729" : "#FFFFFF";
+const corRoxo = () => temaEscuro() ? "#B15CE0" : "#8A05BE";
+function aplicarTema(t){
+  document.documentElement.dataset.tema = t;
+  el("tema-btn").textContent = t === "escuro" ? "☀️" : "🌙";
+  try { localStorage.setItem("kf-tema", t); } catch(e){}
+  // Os gráficos precisam ser redesenhados com as cores do tema
+  Chart.defaults.color = t === "escuro" ? "#A79DB8" : "#6E6480";
+  Chart.defaults.borderColor = t === "escuro" ? "rgba(167,157,184,.14)" : "rgba(110,100,128,.12)";
+  if (DB.lancamentos) renderTudo();
+}
+function alternarTema(){ aplicarTema(temaEscuro() ? "claro" : "escuro"); }
+(function(){
+  let t = "claro";
+  try { t = localStorage.getItem("kf-tema") ?? "claro"; } catch(e){}
+  aplicarTema(t);
+})();
+
 /* ---------------- Login ---------------- */
 async function entrar(){
   el("login-erro").textContent = "";
@@ -566,7 +622,7 @@ function renderDashboard(){
   novoChart("g-pizza", { type:"doughnut",
     data:{ labels:nomes, datasets:[{ data:nomes.map(n=>porCat[n].v),
       backgroundColor:nomes.map((n,i)=>porCat[n].cor || CORES[i%CORES.length]),
-      borderWidth:2, borderColor:"#fff" }]},
+      borderWidth:2, borderColor:corCard() }]},
     options:{ plugins:{ legend:{ position:"right" }}, cutout:"62%" }});
 
   // Barras: 6 períodos
@@ -580,7 +636,7 @@ function renderDashboard(){
   novoChart("g-barras", { type:"bar",
     data:{ labels:rot, datasets:[
       { label:"Receitas", data:rr, backgroundColor:"#12A454", borderRadius:6 },
-      { label:"Gastos", data:gg, backgroundColor:"#8A05BE", borderRadius:6 }]},
+      { label:"Gastos", data:gg, backgroundColor:corRoxo(), borderRadius:6 }]},
     options:{ plugins:{ legend:{ position:"bottom" }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
 
   // Linha: saldo acumulado dia a dia dentro do período
@@ -591,7 +647,7 @@ function renderDashboard(){
   let acum = 0; const serie = dias.map(d=>({ x:dBR(d).slice(0,5), y:(acum+=porDia[d]) }));
   novoChart("g-linha", { type:"line",
     data:{ labels:serie.map(p=>p.x), datasets:[{ label:"Saldo acumulado", data:serie.map(p=>p.y),
-      borderColor:"#8A05BE", backgroundColor:"rgba(138,5,190,.08)", fill:true, tension:.35, pointRadius:3 }]},
+      borderColor:corRoxo(), backgroundColor:"rgba(138,5,190,.12)", fill:true, tension:.35, pointRadius:3 }]},
     options:{ plugins:{ legend:{ display:false }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
 }
 
@@ -955,7 +1011,7 @@ function renderInvestimentos(){
 
   novoChart("g-patrimonio", { type:"line",
     data:{ labels:serie.map(p=>mesBR(p.mes+"-01")), datasets:[{ label:"Patrimônio",
-      data:serie.map(p=>p.total), borderColor:"#8A05BE", backgroundColor:"rgba(138,5,190,.08)",
+      data:serie.map(p=>p.total), borderColor:corRoxo(), backgroundColor:"rgba(138,5,190,.12)",
       fill:true, tension:.35 }]},
     options:{ plugins:{ legend:{ display:false }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
 
@@ -1318,8 +1374,8 @@ function renderImportar(){
 
 /* ---------------- Navegação e inicialização ---------------- */
 el("nav").addEventListener("click", e=>{
-  const aba = e.target.dataset.aba; if (!aba) return;
-  el("nav").querySelectorAll("button").forEach(b=>b.classList.toggle("ativo", b===e.target));
+  const btn = e.target.closest("button"); const aba = btn?.dataset.aba; if (!aba) return;
+  el("nav").querySelectorAll("button").forEach(b=>b.classList.toggle("ativo", b===btn));
   document.querySelectorAll(".aba").forEach(s=>s.classList.toggle("ativa", s.id==="aba-"+aba));
 });
 function renderTudo(){
