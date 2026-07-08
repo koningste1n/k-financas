@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
     --roxo:#8A05BE; --roxo-escuro:#5C0790; --lilas:#F6EEFB; --lilas-borda:#EBDDF6;
@@ -97,6 +98,21 @@
   #modal input, #modal select{width:100%}
   .modal-acoes{display:flex; gap:10px; justify-content:flex-end; margin-top:18px}
   canvas{max-height:290px}
+
+  /* ---------- Novidades: faturas, assinaturas, importação, config ---------- */
+  .selo{display:inline-block; font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:99px}
+  .selo-paga{background:#E3F6EC; color:var(--verde)}
+  .selo-aberta{background:#FDEEEF; color:var(--vermelho)}
+  .selo-prevista{background:var(--lilas); color:var(--roxo)}
+  .btn-mini{border:1px solid var(--lilas-borda); background:#fff; color:var(--roxo); border-radius:9px; padding:5px 11px; font-size:12.5px; font-weight:600}
+  .btn-mini:hover{background:var(--lilas)}
+  .swatch{display:inline-block; width:14px; height:14px; border-radius:5px; vertical-align:-2px; margin-right:6px; border:1px solid rgba(0,0,0,.08)}
+  input[type=color]{padding:2px; width:44px; height:32px; border-radius:8px; cursor:pointer}
+  td.previsto, .previsto{color:var(--texto-2); font-style:italic}
+  .linha-passada td{color:var(--texto-2)}
+  .imp-ja{opacity:.55}
+  .imp-status{font-size:16px}
+  details.fatura-antiga summary{cursor:pointer; font-weight:600; color:var(--roxo); font-size:13.5px; padding:6px 0}
 </style>
 </head>
 <body>
@@ -129,6 +145,9 @@
       <button data-aba="contas">Contas e Saldos</button>
       <button data-aba="orcamento">Orçamento</button>
       <button data-aba="investimentos">Investimentos</button>
+      <button data-aba="assinaturas">Assinaturas</button>
+      <button data-aba="importar">Importar extrato</button>
+      <button data-aba="config">Configurações</button>
     </nav>
   </header>
 
@@ -180,6 +199,16 @@
     <!-- ========== FATURAS ========== -->
     <section class="aba" id="aba-faturas">
       <div class="titulo-aba"><h2>Cartões e faturas</h2></div>
+      <div class="painel">
+        <h3>+ Novo cartão</h3>
+        <div class="form-linha">
+          <div class="campo"><label>Nome do cartão</label><input id="nc-nome" placeholder="Ex.: Porto Seguro" style="width:170px"></div>
+          <div class="campo"><label>Dia de fechamento</label><input type="number" min="1" max="28" id="nc-fech" placeholder="3" style="width:120px"></div>
+          <div class="campo"><label>Dia de vencimento</label><input type="number" min="1" max="28" id="nc-venc" placeholder="10" style="width:120px"></div>
+          <button class="btn" onclick="salvarCartao()">Adicionar cartão</button>
+        </div>
+        <p style="font-size:12.5px; color:var(--texto-2)">O cartão novo já aparece automaticamente no formulário de lançamento e para o bot do Telegram.</p>
+      </div>
       <div id="lista-faturas"></div>
     </section>
 
@@ -251,6 +280,103 @@
         </table></div>
       </div>
     </section>
+
+    <!-- ========== ASSINATURAS ========== -->
+    <section class="aba" id="aba-assinaturas">
+      <div class="titulo-aba"><h2>Assinaturas</h2></div>
+      <div class="cards" id="kpis-assin"></div>
+      <div class="painel">
+        <h3 id="assin-form-titulo">+ Nova assinatura</h3>
+        <input type="hidden" id="as-id">
+        <div class="form-linha">
+          <div class="campo"><label>Nome</label><input id="as-nome" placeholder="Netflix" style="width:140px"></div>
+          <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" id="as-valor" style="width:100px"></div>
+          <div class="campo"><label>Cartão</label><select id="as-cartao"></select></div>
+          <div class="campo"><label>Dia de cobrança</label><input type="number" min="1" max="28" id="as-dia" placeholder="15" style="width:110px"></div>
+          <div class="campo"><label>Frequência</label><select id="as-freq"><option value="mensal">Mensal</option><option value="anual">Anual</option><option value="semanal">Semanal</option></select></div>
+          <div class="campo"><label>Categoria</label><select id="as-cat" onchange="assinSubcats()"></select></div>
+          <div class="campo"><label>Subcategoria</label><select id="as-sub"></select></div>
+          <div class="campo"><label>Início</label><input type="date" id="as-inicio"></div>
+          <button class="btn" onclick="salvarAssinatura()">Salvar</button>
+          <button class="btn btn-claro" id="as-cancelar" style="display:none" onclick="limparFormAssinatura()">Cancelar edição</button>
+        </div>
+      </div>
+      <div class="painel">
+        <h3>Minhas assinaturas</h3>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Nome</th><th>Cartão</th><th>Cobrança</th><th>Categoria</th><th class="dir">Valor</th><th class="dir">≈ por mês</th><th></th></tr></thead>
+          <tbody id="tabela-assin"></tbody>
+        </table></div>
+      </div>
+      <p style="color:var(--texto-2); font-size:13px">Assinaturas são <b>previsões</b>: aparecem nas faturas futuras como "cobrança prevista", mas não viram lançamentos sozinhas. Quando a cobrança real acontecer, registre pelo bot ou pelo CSV — assim nada conta em dobro.</p>
+    </section>
+
+    <!-- ========== IMPORTAR EXTRATO ========== -->
+    <section class="aba" id="aba-importar">
+      <div class="titulo-aba"><h2>Importar extrato (CSV)</h2></div>
+      <div class="painel">
+        <h3>1 · Escolha o arquivo</h3>
+        <div class="form-linha">
+          <div class="campo"><label>Arquivo CSV</label><input type="file" id="imp-arquivo" accept=".csv,text/csv" onchange="lerCSV()"></div>
+          <div class="campo"><label>Tipo do arquivo</label><select id="imp-tipo" onchange="analisarCSV()"><option value="conta">Extrato de conta (negativo = gasto)</option><option value="cartao">Fatura de cartão (positivo = gasto)</option></select></div>
+          <div class="campo"><label>Onde entrou/saiu</label><select id="imp-onde"></select></div>
+        </div>
+        <div id="imp-preset" style="font-size:13px; color:var(--texto-2)"></div>
+      </div>
+      <div class="painel" id="imp-mapa" style="display:none">
+        <h3>2 · Diga qual coluna é o quê</h3>
+        <div class="form-linha">
+          <div class="campo"><label>Coluna da data</label><select id="imp-col-data" onchange="analisarCSV()"></select></div>
+          <div class="campo"><label>Coluna do valor</label><select id="imp-col-valor" onchange="analisarCSV()"></select></div>
+          <div class="campo"><label>Coluna da descrição</label><select id="imp-col-desc" onchange="analisarCSV()"></select></div>
+        </div>
+      </div>
+      <div class="painel" id="imp-revisao" style="display:none">
+        <h3>3 · Revise antes de importar</h3>
+        <p style="font-size:13px; color:var(--texto-2); margin-bottom:12px">
+          🟢 já lançado (não importa de novo) · 🟡 parecido (mesma data e valor — você decide) · 🆕 novo (marcado para importar).
+          Ajuste a categoria de cada linha nova. Nada é salvo até você clicar no botão.</p>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th></th><th></th><th>Data</th><th>Descrição</th><th class="dir">Valor</th><th>Categoria</th><th>Subcategoria</th></tr></thead>
+          <tbody id="imp-tabela"></tbody>
+        </table></div>
+        <div class="modal-acoes">
+          <span id="imp-contagem" style="align-self:center; color:var(--texto-2); font-size:13px"></span>
+          <button class="btn" onclick="importarSelecionados()">Importar selecionados</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== CONFIGURAÇÕES ========== -->
+    <section class="aba" id="aba-config">
+      <div class="titulo-aba"><h2>Configurações</h2></div>
+      <div class="painel">
+        <h3>+ Nova categoria</h3>
+        <div class="form-linha">
+          <div class="campo"><label>Nome</label><input id="cf-nome" placeholder="Ex.: Pets" style="width:150px"></div>
+          <div class="campo"><label>Tipo</label><select id="cf-tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+          <div class="campo"><label>Grupo 50/30/20</label><select id="cf-grupo"><option value="">— nenhum —</option><option value="necessidades">Necessidades (50%)</option><option value="desejos">Desejos (30%)</option><option value="poupanca">Poupança (20%)</option></select></div>
+          <div class="campo"><label>Cor</label><input type="color" id="cf-cor" value="#8A05BE"></div>
+          <button class="btn" onclick="salvarCategoria()">Adicionar</button>
+        </div>
+      </div>
+      <div class="painel">
+        <h3>+ Nova subcategoria</h3>
+        <div class="form-linha">
+          <div class="campo"><label>Categoria</label><select id="cf-sub-cat"></select></div>
+          <div class="campo"><label>Nome da subcategoria</label><input id="cf-sub-nome" placeholder="Ex.: Ração" style="width:170px"></div>
+          <button class="btn" onclick="salvarSubcategoria()">Adicionar</button>
+        </div>
+      </div>
+      <div class="painel">
+        <h3>Minhas categorias</h3>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Cor</th><th>Categoria</th><th>Tipo</th><th>Grupo 50/30/20</th><th>Subcategorias</th></tr></thead>
+          <tbody id="tabela-config"></tbody>
+        </table></div>
+        <p style="font-size:12.5px; color:var(--texto-2); margin-top:10px">Clique no quadradinho de cor para trocar — o gráfico "Gastos por categoria" usa essas cores. Categorias novas ficam disponíveis para o bot do Telegram automaticamente.</p>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -319,17 +445,19 @@ el("login-senha").addEventListener("keydown", e => { if (e.key === "Enter") entr
 /* ---------------- Carregamento ---------------- */
 async function carregarTudo(){
   const q = (t, sel="*", ord="id") => sb.from(t).select(sel).order(ord);
-  const [contas, cartoes, cats, subs, lanc, compras, parc, orc, ap, pat, cdi] = await Promise.all([
+  const [contas, cartoes, cats, subs, lanc, compras, parc, orc, ap, pat, cdi, assin, fatst] = await Promise.all([
     q("contas"), q("cartoes"), q("categorias"), q("subcategorias"),
     sb.from("lancamentos").select("*").order("data", { ascending:false }).order("id", { ascending:false }),
     q("compras_parceladas"), sb.from("parcelas").select("*").order("vencimento"),
     q("orcamentos"), sb.from("aportes").select("*").order("data", {ascending:false}),
     sb.from("patrimonio").select("*").order("data"), sb.from("cdi_mensal").select("*").order("mes"),
+    q("assinaturas"), q("faturas"),
   ]);
   DB = { contas: contas.data??[], cartoes: cartoes.data??[], categorias: cats.data??[],
          subcategorias: subs.data??[], lancamentos: lanc.data??[], compras: compras.data??[],
          parcelas: parc.data??[], orcamentos: orc.data??[], aportes: ap.data??[],
-         patrimonio: pat.data??[], cdi: cdi.data??[] };
+         patrimonio: pat.data??[], cdi: cdi.data??[],
+         assinaturas: assin.data??[], faturas: fatst.data??[] };
   CAT = Object.fromEntries(DB.categorias.map(c=>[c.id,c]));
   SUB = Object.fromEntries(DB.subcategorias.map(s=>[s.id,s]));
   CONTA = Object.fromEntries(DB.contas.map(c=>[c.id,c]));
@@ -417,12 +545,17 @@ function renderDashboard(){
     ${periodo.tipo==="mes" && orcado>0 ? `<div class="card"><div class="rotulo">Ainda posso gastar</div><div class="valor num ${possoGastar>=0?"roxo":"vermelho"}">${R$(possoGastar)}</div></div>` : ""}
     <div class="card"><div class="rotulo">Comprometido em faturas futuras</div><div class="valor num roxo">${R$(comprometido)}</div></div>`;
 
-  // Pizza por categoria
+  // Pizza por categoria — usa a cor cadastrada de cada categoria
   const porCat = {};
-  gPer.forEach(i=>{ const n = CAT[i.categoria_id]?.nome ?? "Sem categoria"; porCat[n]=(porCat[n]||0)+i.valor; });
+  gPer.forEach(i=>{ const c = CAT[i.categoria_id];
+    const n = c?.nome ?? "Sem categoria";
+    if (!porCat[n]) porCat[n] = { v:0, cor: c?.cor };
+    porCat[n].v += i.valor; });
   const nomes = Object.keys(porCat);
   novoChart("g-pizza", { type:"doughnut",
-    data:{ labels:nomes, datasets:[{ data:nomes.map(n=>porCat[n]), backgroundColor:CORES, borderWidth:2, borderColor:"#fff" }]},
+    data:{ labels:nomes, datasets:[{ data:nomes.map(n=>porCat[n].v),
+      backgroundColor:nomes.map((n,i)=>porCat[n].cor || CORES[i%CORES.length]),
+      borderWidth:2, borderColor:"#fff" }]},
     options:{ plugins:{ legend:{ position:"right" }}, cutout:"62%" }});
 
   // Barras: 6 períodos
@@ -530,28 +663,106 @@ async function salvarLancamento(){
 }
 
 /* ---------------- Cartões e faturas ---------------- */
+async function salvarCartao(){
+  const nome = el("nc-nome").value.trim(), fech = +el("nc-fech").value, venc = +el("nc-venc").value;
+  if (!nome || !fech || !venc){ alert("Preencha nome, dia de fechamento e dia de vencimento."); return; }
+  const { error } = await sb.from("cartoes").insert({ nome, dia_fechamento: fech, dia_vencimento: venc });
+  if (error){ alert("Erro ao salvar o cartão: "+error.message); return; }
+  el("nc-nome").value = el("nc-fech").value = el("nc-venc").value = "";
+  await recarregar();
+}
+
+/* Datas de cobrança previstas de uma assinatura (só de hoje em diante, até ~12 meses) */
+function cobrancasPrevistas(a){
+  const out = [];
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const limite = new Date(hoje.getFullYear(), hoje.getMonth()+13, 0);
+  const inicio = a.data_inicio ? pD(a.data_inicio) : hoje;
+  if (a.frequencia === "semanal"){
+    const d = new Date(inicio);
+    while (d < hoje) d.setDate(d.getDate()+7);
+    while (d <= limite){ out.push(iso(d)); d.setDate(d.getDate()+7); }
+  } else if (a.frequencia === "anual"){
+    for (let k=0; k<2; k++){
+      const d = new Date(hoje.getFullYear()+k, inicio.getMonth(), a.dia_cobranca || inicio.getDate());
+      if (d >= hoje && d >= inicio && d <= limite) out.push(iso(d));
+    }
+  } else { // mensal
+    for (let k=0; k<13; k++){
+      const d = new Date(hoje.getFullYear(), hoje.getMonth()+k, a.dia_cobranca || 1);
+      if (d >= hoje && d >= inicio && d <= limite) out.push(iso(d));
+    }
+  }
+  return out;
+}
+
+function statusFatura(cartaoId, vencISO){
+  const mesRef = vencISO.slice(0,7) + "-01";
+  return DB.faturas.find(f=>f.cartao_id===cartaoId && f.mes_referencia===mesRef) ?? null;
+}
+async function marcarPaga(cartaoId, mesRef, pago){
+  const { error } = await sb.from("faturas").upsert(
+    { cartao_id: cartaoId, mes_referencia: mesRef, pago, data_pagamento: pago ? iso(new Date()) : null },
+    { onConflict: "cartao_id,mes_referencia" });
+  if (error){ alert("Erro ao atualizar a fatura: "+error.message); return; }
+  await recarregar();
+}
+
 function renderFaturas(){
+  const hoje = iso(new Date());
   const html = DB.cartoes.map(cartao=>{
-    const fat = {}; // venc ISO -> {avista, parcelas}
+    const fat = {}; // venc ISO -> {avista, parc, assin}
     DB.lancamentos.filter(l=>l.cartao_id===cartao.id && l.forma_pagamento?.startsWith("cr"))
-      .forEach(l=>{ const v = vencFatura(l.data, cartao); (fat[v]??={avista:0,parc:0}).avista += +l.valor; });
+      .forEach(l=>{ const v = vencFatura(l.data, cartao); (fat[v]??={avista:0,parc:0,assin:0}).avista += +l.valor; });
     DB.parcelas.filter(p=>p.cartao_id===cartao.id)
-      .forEach(p=>{ (fat[p.vencimento]??={avista:0,parc:0}).parc += +p.valor; });
-    const mesPassado = iso(new Date(new Date().getFullYear(), new Date().getMonth()-1, 1));
-    const vencs = Object.keys(fat).filter(v=>v>=mesPassado).sort();
-    const linhas = vencs.map(v=>{
+      .forEach(p=>{ (fat[p.vencimento]??={avista:0,parc:0,assin:0}).parc += +p.valor; });
+    // Assinaturas: só PREVISÃO nas faturas futuras (não são lançamentos!)
+    DB.assinaturas.filter(a=>a.ativa && a.cartao_id===cartao.id).forEach(a=>{
+      cobrancasPrevistas(a).forEach(dt=>{
+        const v = vencFatura(dt, cartao);
+        if (v >= hoje) (fat[v]??={avista:0,parc:0,assin:0}).assin += +a.valor;
+      });
+    });
+
+    const linhaDe = v => {
       const t = fat[v];
-      return `<tr><td class="num">vence ${dBR(v)}</td>
-        <td class="dir num">${R$(t.avista)}</td><td class="dir num">${R$(t.parc)}</td>
-        <td class="dir num" style="font-weight:700">${R$(t.avista+t.parc)}</td></tr>`;
-    }).join("");
+      const passada = v < hoje;
+      const st = statusFatura(cartao.id, v);
+      const paga = !!st?.pago;
+      const mesRef = v.slice(0,7)+"-01";
+      const selo = paga
+        ? `<span class="selo selo-paga">Paga${st?.data_pagamento ? " em "+dBR(st.data_pagamento) : ""}</span>`
+        : `<span class="selo selo-aberta">Em aberto</span>`;
+      const botao = paga
+        ? `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', false)">Desfazer</button>`
+        : `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', true)">Marcar como paga</button>`;
+      return `<tr class="${passada && paga ? "linha-passada" : ""}">
+        <td class="num">vence ${dBR(v)}</td>
+        <td class="dir num">${R$(t.avista)}</td>
+        <td class="dir num">${R$(t.parc)}</td>
+        <td class="dir num previsto">${t.assin ? R$(t.assin) : "—"}</td>
+        <td class="dir num" style="font-weight:700">${R$(t.avista+t.parc)}${t.assin ? `<div class="previsto" style="font-size:11.5px; font-weight:400">+ ${R$(t.assin)} previsto</div>` : ""}</td>
+        <td>${selo}</td><td class="dir">${botao}</td></tr>`;
+    };
+
+    const vencs = Object.keys(fat).sort();
+    const passadas = vencs.filter(v=>v < hoje);
+    const atuais = vencs.filter(v=>v >= hoje);
+    const cabecalho = `<thead><tr><th>Fatura</th><th class="dir">À vista no crédito</th><th class="dir">Parcelas</th><th class="dir">Assinaturas (previsto)</th><th class="dir">Total lançado</th><th>Status</th><th></th></tr></thead>`;
+    const tabAtuais = atuais.length
+      ? `<table>${cabecalho}<tbody>${atuais.map(linhaDe).join("")}</tbody></table>`
+      : `<div class="vazio">Nenhuma fatura atual ou futura para este cartão.</div>`;
+    const tabPassadas = passadas.length
+      ? `<details class="fatura-antiga"><summary>Faturas de meses anteriores (${passadas.length})</summary>
+          <table>${cabecalho}<tbody>${passadas.slice().reverse().map(linhaDe).join("")}</tbody></table></details>`
+      : "";
     return `<div class="painel">
       <h3>💳 ${cartao.nome} <span style="font-weight:400; color:var(--texto-2); font-size:13px">· fecha dia ${cartao.dia_fechamento} · vence dia ${cartao.dia_vencimento}</span></h3>
-      ${vencs.length ? `<table><thead><tr><th>Fatura</th><th class="dir">À vista no crédito</th><th class="dir">Parcelas</th><th class="dir">Total</th></tr></thead><tbody>${linhas}</tbody></table>`
+      ${vencs.length ? tabAtuais + tabPassadas
         : `<div class="vazio">Nenhum gasto no crédito ainda. A primeira compra no cartão aparece aqui.</div>`}
     </div>`;
   }).join("");
-  el("lista-faturas").innerHTML = html;
+  el("lista-faturas").innerHTML = html || `<div class="painel"><div class="vazio">Cadastre seu primeiro cartão acima.</div></div>`;
 }
 
 /* ---------------- Contas ---------------- */
@@ -699,6 +910,317 @@ async function salvarCDI(){
   await recarregar("investimentos");
 }
 
+/* ---------------- Assinaturas ---------------- */
+const FREQ_ROTULO = { mensal:"mensal", anual:"anual", semanal:"semanal" };
+const custoMensal = a => a.frequencia==="anual" ? +a.valor/12 : a.frequencia==="semanal" ? +a.valor*52/12 : +a.valor;
+
+function assinSubcats(selId){
+  const cid = el("as-cat").value;
+  el("as-sub").innerHTML = `<option value="">—</option>` + DB.subcategorias
+    .filter(s=>String(s.categoria_id)===cid)
+    .map(s=>`<option value="${s.id}" ${s.id==selId?"selected":""}>${s.nome}</option>`).join("");
+}
+function renderAssinaturas(){
+  el("as-cartao").innerHTML = DB.cartoes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("");
+  const catSel = el("as-cat").value;
+  el("as-cat").innerHTML = DB.categorias.filter(c=>c.tipo==="despesa")
+    .map(c=>`<option value="${c.id}" ${String(c.id)===catSel?"selected":""}>${c.nome}</option>`).join("");
+  if (!el("as-sub").innerHTML) assinSubcats();
+
+  const ativas = DB.assinaturas.filter(a=>a.ativa);
+  const totalMes = ativas.reduce((s,a)=>s+custoMensal(a),0);
+  el("kpis-assin").innerHTML = `
+    <div class="card"><div class="rotulo">Gasto mensal em assinaturas</div><div class="valor num roxo">${R$(totalMes)}</div></div>
+    <div class="card"><div class="rotulo">Assinaturas ativas</div><div class="valor num">${ativas.length}</div></div>
+    <div class="card"><div class="rotulo">≈ por ano</div><div class="valor num">${R$(totalMes*12)}</div></div>`;
+
+  el("tabela-assin").innerHTML = DB.assinaturas.length ? DB.assinaturas.map(a=>`
+    <tr style="${a.ativa?"":"opacity:.5"}">
+      <td>${a.nome} ${a.ativa?"":'<span class="pilula">inativa</span>'}</td>
+      <td>${CARTAO[a.cartao_id]?.nome ?? "—"}</td>
+      <td>dia ${a.dia_cobranca ?? "—"} · ${FREQ_ROTULO[a.frequencia] ?? a.frequencia}</td>
+      <td><span class="pilula">${CAT[a.categoria_id]?.nome ?? "—"}</span></td>
+      <td class="dir num">${R$(+a.valor)}</td>
+      <td class="dir num">${a.ativa ? R$(custoMensal(a)) : "—"}</td>
+      <td class="dir">
+        <button class="acao" title="Editar" onclick="editarAssinatura(${a.id})">✏️</button>
+        <button class="btn-mini" onclick="alternarAssinatura(${a.id}, ${!a.ativa})">${a.ativa?"Desativar":"Reativar"}</button>
+      </td></tr>`).join("")
+    : `<tr><td colspan="7" class="vazio">Cadastre sua primeira assinatura acima — ela passa a aparecer prevista nas faturas do cartão.</td></tr>`;
+}
+function editarAssinatura(id){
+  const a = DB.assinaturas.find(x=>x.id===id); if (!a) return;
+  el("as-id").value = a.id; el("as-nome").value = a.nome; el("as-valor").value = a.valor;
+  el("as-cartao").value = a.cartao_id ?? ""; el("as-dia").value = a.dia_cobranca ?? "";
+  el("as-freq").value = a.frequencia; el("as-cat").value = a.categoria_id ?? "";
+  assinSubcats(a.subcategoria_id); el("as-inicio").value = a.data_inicio ?? "";
+  el("assin-form-titulo").textContent = "Editar assinatura: "+a.nome;
+  el("as-cancelar").style.display = "";
+}
+function limparFormAssinatura(){
+  el("as-id").value = el("as-nome").value = el("as-valor").value = el("as-dia").value = "";
+  el("as-inicio").value = iso(new Date());
+  el("assin-form-titulo").textContent = "+ Nova assinatura";
+  el("as-cancelar").style.display = "none";
+}
+async function salvarAssinatura(){
+  const reg = {
+    nome: el("as-nome").value.trim(), valor: +el("as-valor").value,
+    cartao_id: +el("as-cartao").value || null, dia_cobranca: +el("as-dia").value || null,
+    frequencia: el("as-freq").value, categoria_id: +el("as-cat").value || null,
+    subcategoria_id: +el("as-sub").value || null,
+    data_inicio: el("as-inicio").value || iso(new Date()),
+  };
+  if (!reg.nome || !reg.valor){ alert("Preencha pelo menos nome e valor."); return; }
+  const id = el("as-id").value;
+  const { error } = id
+    ? await sb.from("assinaturas").update(reg).eq("id", +id)
+    : await sb.from("assinaturas").insert({ ...reg, ativa:true });
+  if (error){ alert("Erro ao salvar: "+error.message); return; }
+  limparFormAssinatura(); await recarregar();
+}
+async function alternarAssinatura(id, ativa){
+  await sb.from("assinaturas").update({ ativa }).eq("id", id);
+  await recarregar();
+}
+
+/* ---------------- Configurações (categorias e cores) ---------------- */
+function renderConfig(){
+  const sel = el("cf-sub-cat").value;
+  el("cf-sub-cat").innerHTML = DB.categorias
+    .map(c=>`<option value="${c.id}" ${String(c.id)===sel?"selected":""}>${c.nome}</option>`).join("");
+  const GRUPO = { necessidades:"Necessidades", desejos:"Desejos", poupanca:"Poupança" };
+  el("tabela-config").innerHTML = DB.categorias.map(c=>{
+    const subs = DB.subcategorias.filter(s=>s.categoria_id===c.id).map(s=>s.nome).join(", ");
+    return `<tr>
+      <td><input type="color" value="${c.cor || "#8A05BE"}" title="Trocar a cor de ${c.nome}"
+        onchange="salvarCorCategoria(${c.id}, this.value)"></td>
+      <td><span class="swatch" style="background:${c.cor || "#8A05BE"}"></span>${c.nome}</td>
+      <td>${c.tipo}</td>
+      <td>${GRUPO[c.grupo_50_30_20] ?? "—"}</td>
+      <td style="color:var(--texto-2); font-size:13px">${subs || "—"}</td>
+    </tr>`;
+  }).join("");
+}
+async function salvarCorCategoria(id, cor){
+  const { error } = await sb.from("categorias").update({ cor }).eq("id", id);
+  if (error){ alert("Erro ao salvar a cor: "+error.message); return; }
+  await recarregar();
+}
+async function salvarCategoria(){
+  const reg = { nome: el("cf-nome").value.trim(), tipo: el("cf-tipo").value,
+    grupo_50_30_20: el("cf-grupo").value || null, cor: el("cf-cor").value };
+  if (!reg.nome){ alert("Dê um nome à categoria."); return; }
+  if (DB.categorias.some(c=>c.nome.toLowerCase()===reg.nome.toLowerCase())){
+    alert("Já existe uma categoria com esse nome."); return; }
+  const { error } = await sb.from("categorias").insert(reg);
+  if (error){ alert("Erro ao salvar: "+error.message); return; }
+  el("cf-nome").value = ""; await recarregar();
+}
+async function salvarSubcategoria(){
+  const reg = { categoria_id: +el("cf-sub-cat").value, nome: el("cf-sub-nome").value.trim() };
+  if (!reg.categoria_id || !reg.nome){ alert("Escolha a categoria e dê um nome."); return; }
+  const { error } = await sb.from("subcategorias").insert(reg);
+  if (error){ alert("Erro ao salvar: "+error.message); return; }
+  el("cf-sub-nome").value = ""; await recarregar();
+}
+
+/* ---------------- Importar extrato (CSV) ---------------- */
+let IMP = { headers:[], rows:[], itens:[] };
+
+const normTexto = s => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+  .replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+
+function descricaoParecida(a, b){
+  a = normTexto(a); b = normTexto(b);
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const ta = a.split(" ").filter(t=>t.length>1);
+  const tb = new Set(b.split(" ").filter(t=>t.length>1));
+  if (!ta.length || !tb.size) return false;
+  const comuns = ta.filter(t=>tb.has(t)).length;
+  return comuns / Math.min(ta.length, tb.size) >= 0.6;
+}
+
+/* "Chute" de categoria por palavra-chave (sem IA, roda no navegador) */
+const PALAVRAS_CHAVE = [
+  [["ifood","restaurante","lanchonete","burger","pizza","padaria","cafe"], "Alimentação", "Delivery"],
+  [["mercado","supermercado","atacad","carrefour","assai","hortifruti","acougue"], "Alimentação", "Mercado"],
+  [["uber","99app","99 ","taxi","metro","onibus","posto","combustivel","estacionamento","pedagio"], "Transporte", null],
+  [["farmacia","drogaria","droga raia","pague menos","hospital","clinica","laboratorio"], "Saúde", null],
+  [["netflix","spotify","prime","disney","hbo","max","youtube","cinema","steam","playstation","xbox","show","ingresso"], "Lazer", null],
+  [["enel","energia","luz","sabesp","agua","vivo","claro","tim","oi ","internet","aluguel","condominio","gas"], "Moradia", null],
+  [["curso","udemy","alura","faculdade","escola","livraria"], "Educação", null],
+  [["tarifa","iof","juros","anuidade","imposto","taxa"], "Tarifas e Impostos", null],
+  [["pagamento de fatura","pagamento recebido","pagamento fatura"], "Cartão de Crédito", null],
+  [["salario","pagamento pix recebido","rendimento"], "Renda", null],
+];
+function chutarCategoria(desc, tipo){
+  const d = normTexto(desc);
+  for (const [chaves, catNome, subNome] of PALAVRAS_CHAVE){
+    if (chaves.some(k=>d.includes(k))){
+      const cat = DB.categorias.find(c=>c.nome===catNome);
+      if (!cat) continue;
+      const sub = subNome ? DB.subcategorias.find(s=>s.categoria_id===cat.id && s.nome===subNome) : null;
+      return { categoria_id: cat.id, subcategoria_id: sub?.id ?? null };
+    }
+  }
+  const padrao = DB.categorias.find(c=>c.tipo===tipo);
+  return { categoria_id: padrao?.id ?? null, subcategoria_id: null };
+}
+
+function parseValorBR(s){
+  if (typeof s === "number") return s;
+  s = String(s ?? "").trim().replace(/R\$\s?/g,"");
+  if (!s) return NaN;
+  if (s.includes(",")) s = s.replace(/\./g,"").replace(",",".");
+  return parseFloat(s);
+}
+function parseDataCSV(s){
+  s = String(s ?? "").trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);           // 2026-07-05
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);          // 05/07/2026
+  if (m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);         // 05/07/26
+  if (m) return `20${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  return null;
+}
+
+function lerCSV(){
+  const arq = el("imp-arquivo").files[0];
+  if (!arq) return;
+  Papa.parse(arq, {
+    header: true, skipEmptyLines: true,
+    complete: (res)=>{
+      IMP.headers = res.meta.fields ?? [];
+      IMP.rows = res.data ?? [];
+      // Predefinições por cabeçalho conhecido
+      const h = IMP.headers.map(x=>normTexto(x));
+      let preset = null, colData = "", colValor = "", colDesc = "";
+      if (h.includes("date") && h.includes("title") && h.includes("amount")){
+        preset = "Nubank cartão"; colData="date"; colValor="amount"; colDesc="title";
+        el("imp-tipo").value = "cartao";
+      } else if (h.includes("data") && h.includes("valor") && (h.includes("descricao") || h.includes("descricao do lancamento"))){
+        preset = "Nubank conta"; el("imp-tipo").value = "conta";
+        colData = IMP.headers[h.indexOf("data")]; colValor = IMP.headers[h.indexOf("valor")];
+        colDesc = IMP.headers[h.findIndex(x=>x.startsWith("descricao"))];
+      } else if (h.some(x=>x.includes("porto"))){
+        preset = "Porto Seguro";
+      }
+      el("imp-preset").textContent = preset
+        ? `Formato detectado: ${preset}. Confira o mapeamento abaixo.`
+        : `Não reconheci o formato automaticamente — escolha as colunas abaixo.`;
+      const opts = `<option value="">— escolha —</option>` +
+        IMP.headers.map(x=>`<option value="${x}">${x}</option>`).join("");
+      el("imp-col-data").innerHTML = el("imp-col-valor").innerHTML = el("imp-col-desc").innerHTML = opts;
+      const tenta = (elId, alvo, candidatos) => {
+        if (alvo){ el(elId).value = alvo; return; }
+        const i = h.findIndex(x=>candidatos.some(c=>x.includes(c)));
+        if (i>=0) el(elId).value = IMP.headers[i];
+      };
+      tenta("imp-col-data", colData, ["data","date"]);
+      tenta("imp-col-valor", colValor, ["valor","amount","value"]);
+      tenta("imp-col-desc", colDesc, ["desc","title","titulo","historico","lancamento"]);
+      el("imp-mapa").style.display = "";
+      analisarCSV();
+    },
+    error: ()=>alert("Não consegui ler esse arquivo. Confirme que é um CSV."),
+  });
+}
+
+function analisarCSV(){
+  const cData = el("imp-col-data").value, cValor = el("imp-col-valor").value, cDesc = el("imp-col-desc").value;
+  if (!IMP.rows.length || !cData || !cValor || !cDesc){ el("imp-revisao").style.display = "none"; return; }
+  const tipoArq = el("imp-tipo").value; // conta | cartao
+  IMP.itens = [];
+  IMP.rows.forEach((r, idx)=>{
+    const data = parseDataCSV(r[cData]);
+    const bruto = parseValorBR(r[cValor]);
+    const desc = String(r[cDesc] ?? "").trim();
+    if (!data || isNaN(bruto) || bruto === 0) return;
+    // Sinal: extrato de conta → negativo é gasto; fatura de cartão → positivo é gasto
+    const despesa = tipoArq === "conta" ? bruto < 0 : bruto > 0;
+    const valor = Math.abs(bruto);
+    const tipo = despesa ? "despesa" : "receita";
+    // Impressão digital: mesma data + mesmo valor (+ descrição parecida)
+    const candidatos = DB.lancamentos.filter(l=>l.data===data && Math.abs(+l.valor - valor) < 0.005);
+    let status = "novo";
+    if (candidatos.some(l=>descricaoParecida(l.descricao, desc))) status = "ja";
+    else if (candidatos.length) status = "parecido";
+    const ehPagFatura = normTexto(desc).includes("pagamento") && normTexto(desc).includes("fatura")
+      || normTexto(desc).includes("pagamento recebido");
+    const chute = ehPagFatura
+      ? { categoria_id: DB.categorias.find(c=>c.nome==="Cartão de Crédito")?.id ?? null, subcategoria_id: null }
+      : chutarCategoria(desc, tipo);
+    IMP.itens.push({ idx, data, desc, valor, tipo, status,
+      marcado: status==="novo" && !(tipoArq==="cartao" && ehPagFatura),
+      ...chute });
+  });
+  renderRevisaoCSV();
+}
+
+function renderRevisaoCSV(){
+  if (!IMP.itens.length){
+    el("imp-revisao").style.display = "";
+    el("imp-tabela").innerHTML = `<tr><td colspan="7" class="vazio">Nenhuma linha válida encontrada — confira o mapeamento de colunas.</td></tr>`;
+    el("imp-contagem").textContent = "";
+    return;
+  }
+  const EMOJI = { ja:"🟢", parecido:"🟡", novo:"🆕" };
+  const TITULO = { ja:"Já lançado", parecido:"Parecido (mesma data e valor)", novo:"Novo" };
+  el("imp-tabela").innerHTML = IMP.itens.map((it,i)=>{
+    const cats = DB.categorias.filter(c=>c.tipo===it.tipo);
+    const selCat = `<select onchange="IMP.itens[${i}].categoria_id=+this.value; IMP.itens[${i}].subcategoria_id=null; renderRevisaoCSV()">${
+      cats.map(c=>`<option value="${c.id}" ${c.id===it.categoria_id?"selected":""}>${c.nome}</option>`).join("")}</select>`;
+    const subs = DB.subcategorias.filter(s=>s.categoria_id===it.categoria_id);
+    const selSub = `<select onchange="IMP.itens[${i}].subcategoria_id=+this.value||null"><option value="">—</option>${
+      subs.map(s=>`<option value="${s.id}" ${s.id===it.subcategoria_id?"selected":""}>${s.nome}</option>`).join("")}</select>`;
+    return `<tr class="${it.status==="ja"?"imp-ja":""}">
+      <td><input type="checkbox" ${it.marcado?"checked":""} onchange="IMP.itens[${i}].marcado=this.checked; contagemCSV()"></td>
+      <td class="imp-status" title="${TITULO[it.status]}">${EMOJI[it.status]}</td>
+      <td class="num">${dBR(it.data)}</td>
+      <td>${it.desc}</td>
+      <td class="dir num ${it.tipo==="receita"?"verde":""}">${it.tipo==="receita"?"+":"−"} ${R$(it.valor)}</td>
+      <td>${selCat}</td><td>${selSub}</td></tr>`;
+  }).join("");
+  el("imp-revisao").style.display = "";
+  contagemCSV();
+}
+function contagemCSV(){
+  const n = IMP.itens.filter(i=>i.marcado).length;
+  el("imp-contagem").textContent = `${n} de ${IMP.itens.length} linhas marcadas para importar`;
+}
+
+async function importarSelecionados(){
+  const marcados = IMP.itens.filter(i=>i.marcado);
+  if (!marcados.length){ alert("Nenhuma linha marcada."); return; }
+  if (!confirm(`Importar ${marcados.length} lançamento(s)? Nada será apagado — só adicionados.`)) return;
+  const [tipoOnde, idOnde] = (el("imp-onde").value || "-").split("-");
+  const tipoArq = el("imp-tipo").value;
+  const registros = marcados.map(it=>({
+    data: it.data, descricao: it.desc, tipo: it.tipo,
+    categoria_id: it.categoria_id, subcategoria_id: it.subcategoria_id,
+    fixo_variavel: "variavel",
+    conta_id: tipoOnde==="conta" ? +idOnde : null,
+    cartao_id: tipoOnde==="cartao" ? +idOnde : null,
+    forma_pagamento: tipoArq==="cartao" ? "crédito" : (it.tipo==="receita" ? "pix" : "débito"),
+    valor: it.valor, origem: "csv",
+  }));
+  const { error } = await sb.from("lancamentos").insert(registros);
+  if (error){ alert("Erro ao importar: "+error.message); return; }
+  alert(`✅ ${registros.length} lançamento(s) importado(s)!`);
+  el("imp-arquivo").value = ""; el("imp-mapa").style.display = el("imp-revisao").style.display = "none";
+  IMP = { headers:[], rows:[], itens:[] };
+  await recarregar();
+}
+
+function renderImportar(){
+  el("imp-onde").innerHTML =
+    DB.contas.map(c=>`<option value="conta-${c.id}">Conta · ${c.nome}</option>`).join("") +
+    DB.cartoes.map(c=>`<option value="cartao-${c.id}">Cartão · ${c.nome}</option>`).join("");
+}
+
 /* ---------------- Navegação e inicialização ---------------- */
 el("nav").addEventListener("click", e=>{
   const aba = e.target.dataset.aba; if (!aba) return;
@@ -707,6 +1229,7 @@ el("nav").addEventListener("click", e=>{
 });
 function renderTudo(){
   renderDashboard(); renderLanc(); renderFaturas(); renderContas(); renderOrcamento(); renderInvestimentos();
+  renderAssinaturas(); renderConfig(); renderImportar();
   el("f-cat").innerHTML = `<option value="">Todas</option>` +
     DB.categorias.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("");
 }
@@ -714,7 +1237,7 @@ async function recarregar(){ await carregarTudo(); renderTudo(); }
 async function iniciarApp(){
   el("login").style.display = "none"; el("app").style.display = "block";
   el("f-mes").value = iso(new Date()).slice(0,7);
-  el("ap-data").value = el("pt-data").value = iso(new Date());
+  el("ap-data").value = el("pt-data").value = el("as-inicio").value = iso(new Date());
   el("cdi-mes").value = iso(new Date()).slice(0,7);
   await recarregar();
 }
