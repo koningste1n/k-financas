@@ -148,6 +148,27 @@
   .imp-ja{opacity:.55}
   .imp-status{font-size:16px}
   details.fatura-antiga summary{cursor:pointer; font-weight:600; color:var(--roxo); font-size:13.5px; padding:6px 0}
+
+  /* ---------- Itens compactos (sem rolagem lateral) ---------- */
+  html, body{overflow-x:hidden; max-width:100%}
+  .fatura-item{display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:12px 2px; border-bottom:1px solid var(--linha)}
+  .fatura-item:last-child{border-bottom:none}
+  .fi-esq{flex:1; min-width:150px}
+  .fi-venc{font-weight:600; font-size:14.5px}
+  .fi-detalhe{font-size:12px; color:var(--texto-2); margin-top:3px}
+  .fi-total{font-weight:700; font-size:15px; white-space:nowrap}
+  .item-lanc{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 2px; border-bottom:1px solid var(--linha); cursor:pointer}
+  .item-lanc:last-child{border-bottom:none}
+  .item-lanc .desc{font-weight:600; font-size:14.5px}
+  .item-lanc .meta{font-size:12px; color:var(--texto-2); margin-top:3px}
+  .item-lanc .val{font-weight:700; white-space:nowrap}
+  .lista-cards{display:none}
+  .mini-titulo{font-size:12px; color:var(--texto-2); text-transform:uppercase; letter-spacing:.4px; font-weight:600; margin:14px 0 4px}
+  .link-aba{background:none; border:none; color:var(--roxo); font-weight:600; font-size:13px; padding:0}
+  @media(max-width:640px){
+    .so-desktop{display:none !important}
+    .lista-cards{display:block}
+  }
 </style>
 </head>
 <body>
@@ -205,6 +226,10 @@
       </div>
       <div class="cards" id="kpis"></div>
       <div class="grade-2">
+        <div class="painel" id="dash-rapido"></div>
+        <div class="painel" id="dash-resumos"></div>
+      </div>
+      <div class="grade-2">
         <div class="painel"><h3>Gastos por categoria</h3><canvas id="g-pizza"></canvas></div>
         <div class="painel"><h3>Receitas × Gastos</h3><canvas id="g-barras"></canvas></div>
       </div>
@@ -224,10 +249,11 @@
           <div class="campo"><label>Categoria</label><select id="f-cat" onchange="renderLanc()"><option value="">Todas</option></select></div>
           <div class="campo"><label>Buscar</label><input type="text" id="f-busca" placeholder="Descrição..." oninput="renderLanc()"></div>
         </div>
-        <div style="overflow-x:auto"><table>
+        <div style="overflow-x:auto" class="so-desktop"><table>
           <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Onde</th><th class="dir">Valor</th><th></th></tr></thead>
           <tbody id="tabela-lanc"></tbody>
         </table></div>
+        <div class="lista-cards" id="cards-lanc"></div>
       </div>
       <p style="color:var(--texto-2); font-size:13px">Parcelas de compras parceladas não aparecem aqui — elas ficam projetadas em <b>Cartões e Faturas</b>.</p>
     </section>
@@ -442,6 +468,7 @@
     <div class="campo"><label>Conta ou cartão</label><select id="m-onde"></select></div>
     <div class="campo"><label>Fixo ou variável?</label><select id="m-fixo"><option value="variavel">Variável</option><option value="fixo">Fixo</option></select></div>
     <div class="modal-acoes">
+      <button class="btn btn-claro" id="m-excluir" style="display:none; color:var(--vermelho); margin-right:auto" onclick="excluirLanc(+el('m-id').value)">🗑️ Excluir</button>
       <button class="btn btn-claro" onclick="fecharModal()">Cancelar</button>
       <button class="btn" onclick="salvarLancamento()">Salvar</button>
     </div>
@@ -649,6 +676,90 @@ function renderDashboard(){
     data:{ labels:serie.map(p=>p.x), datasets:[{ label:"Saldo acumulado", data:serie.map(p=>p.y),
       borderColor:corRoxo(), backgroundColor:"rgba(138,5,190,.12)", fill:true, tension:.35, pointRadius:3 }]},
     options:{ plugins:{ legend:{ display:false }}, scales:{ y:{ ticks:{ callback:v=>"R$ "+v.toLocaleString("pt-BR") }}}}});
+
+  renderDashboardExtras();
+}
+
+/* ----- Painéis de visão rápida do Dashboard ----- */
+function irParaAba(aba){
+  el("nav").querySelectorAll("button").forEach(b=>b.classList.toggle("ativo", b.dataset.aba===aba));
+  document.querySelectorAll(".aba").forEach(s=>s.classList.toggle("ativa", s.id==="aba-"+aba));
+  window.scrollTo({ top:0 });
+}
+function renderDashboardExtras(){
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const hojeISO = iso(hoje);
+
+  // --- Painel 1: lançamento rápido + gastos da semana + últimos lançamentos
+  const seteDias = iso(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()-7));
+  const gastos7 = itensGasto().filter(i=>i.data > seteDias && i.data <= hojeISO)
+    .reduce((s,i)=>s+i.valor, 0);
+  const ultimos = DB.lancamentos.slice(0,3);
+  el("dash-rapido").innerHTML = `
+    <h3>⚡ Rápido</h3>
+    <button class="btn" style="width:100%" onclick="abrirModal()">+ Novo lançamento</button>
+    <p class="mini-titulo">Gastos nos últimos 7 dias</p>
+    <div class="num" style="font-size:21px; font-weight:700">${R$(gastos7)}</div>
+    <p class="mini-titulo">Últimos lançamentos</p>
+    ${ultimos.length ? ultimos.map(l=>`
+      <div class="item-lanc" onclick="abrirModal(${l.id})" style="display:flex">
+        <div style="min-width:0">
+          <div class="desc">${l.descricao || CAT[l.categoria_id]?.nome || "Lançamento"}</div>
+          <div class="meta">${dBR(l.data).slice(0,5)} · ${CAT[l.categoria_id]?.nome ?? "—"}</div>
+        </div>
+        <div class="val num ${l.tipo==="receita"?"verde":""}">${l.tipo==="receita"?"+":"−"} ${R$(+l.valor)}</div>
+      </div>`).join("")
+      : `<div class="vazio">Nenhum lançamento ainda.</div>`}
+    <button class="link-aba" onclick="irParaAba('lancamentos')">Ver todos →</button>`;
+
+  // --- Painel 2: próxima fatura + investimentos
+  let prox = null;
+  DB.cartoes.forEach(cartao=>{
+    const fat = calcularFaturas(cartao);
+    const v = Object.keys(fat).filter(x=>x>=hojeISO).sort()[0];
+    if (v && (!prox || v < prox.venc)) prox = { cartao, venc:v, t:fat[v] };
+  });
+  let htmlFat;
+  if (prox){
+    const st = statusFatura(prox.cartao.id, prox.venc);
+    const selo = st?.pago ? `<span class="selo selo-paga">Paga</span>` : `<span class="selo selo-aberta">Em aberto</span>`;
+    htmlFat = `
+      <div class="fi-venc">${prox.cartao.nome} · vence ${dBR(prox.venc)} ${selo}</div>
+      <div class="num" style="font-size:21px; font-weight:700; margin-top:4px">${R$(prox.t.avista+prox.t.parc)}</div>
+      ${prox.t.assin ? `<div class="fi-detalhe previsto">+ ${R$(prox.t.assin)} previsto (assinaturas)</div>` : ""}
+      <button class="link-aba" onclick="irParaAba('faturas')">Ver faturas →</button>`;
+  } else {
+    htmlFat = `<div class="vazio">Nenhuma fatura em aberto. 🎉</div>`;
+  }
+
+  // Investimentos: evolução do patrimônio (último registro × ~1 mês e ~1 ano atrás)
+  const porData = {};
+  DB.patrimonio.forEach(p=>{ porData[p.data] = (porData[p.data]||0) + +p.valor_atual; });
+  const datas = Object.keys(porData).sort();
+  let htmlInv;
+  if (datas.length){
+    const atual = porData[datas.at(-1)];
+    const base = diasAtras => {
+      const limite = iso(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()-diasAtras));
+      const d = datas.filter(x=>x<=limite).at(-1);
+      return d ? porData[d] : null;
+    };
+    const varDe = b => {
+      if (b === null || b === 0) return `<span style="color:var(--texto-2)">sem registro</span>`;
+      const dif = atual-b, pct = dif/b*100;
+      const cor = dif >= 0 ? "verde" : "";
+      return `<span class="num ${cor}" style="${dif<0?"color:var(--vermelho)":""}">${dif>=0?"+":""}${R$(dif)} (${pct>=0?"+":""}${pct.toFixed(1)}%)</span>`;
+    };
+    htmlInv = `
+      <div class="num" style="font-size:21px; font-weight:700">${R$(atual)}</div>
+      <div class="fi-detalhe">no mês: ${varDe(base(30))} · em 12 meses: ${varDe(base(365))}</div>
+      <button class="link-aba" onclick="irParaAba('investimentos')">Ver investimentos →</button>`;
+  } else {
+    htmlInv = `<div class="vazio">Mande um print do saldo pelo bot para acompanhar a evolução aqui.</div>`;
+  }
+  el("dash-resumos").innerHTML = `
+    <h3>💳 Próxima fatura</h3>${htmlFat}
+    <p class="mini-titulo" style="margin-top:16px">📈 Investimentos (patrimônio)</p>${htmlInv}`;
 }
 
 /* ---------------- Lançamentos ---------------- */
@@ -670,10 +781,22 @@ function renderLanc(){
       <td class="dir"><button class="acao" title="Editar" onclick="abrirModal(${l.id})">✏️</button><button class="acao" title="Excluir" onclick="excluirLanc(${l.id})">🗑️</button></td>
     </tr>`; }).join("")
     : `<tr><td colspan="6" class="vazio">Nenhum lançamento por aqui ainda. Mande um gasto pelo bot ou clique em “+ Novo lançamento”.</td></tr>`;
+  // Versão celular: linha compacta, toque abre o boxe com todos os detalhes
+  el("cards-lanc").innerHTML = linhas.length ? linhas.map(l=>{
+    const onde = l.cartao_id ? "💳 "+(CARTAO[l.cartao_id]?.nome??"") : (CONTA[l.conta_id]?.nome??"—");
+    return `<div class="item-lanc" onclick="abrirModal(${l.id})">
+      <div style="min-width:0">
+        <div class="desc">${l.descricao || CAT[l.categoria_id]?.nome || "Lançamento"}</div>
+        <div class="meta">${dBR(l.data).slice(0,5)} · ${CAT[l.categoria_id]?.nome??"—"} · ${onde}</div>
+      </div>
+      <div class="val num ${l.tipo==="receita"?"verde":""}">${l.tipo==="receita"?"+":"−"} ${R$(+l.valor)}</div>
+    </div>`; }).join("")
+    : `<div class="vazio">Nenhum lançamento por aqui ainda. Toque em “+ Novo lançamento”.</div>`;
 }
 async function excluirLanc(id){
   if (!confirm("Excluir este lançamento?")) return;
   await sb.from("lancamentos").delete().eq("id", id);
+  fecharModal();
   await recarregar();
 }
 
@@ -705,6 +828,7 @@ function abrirModal(id){
   el("m-forma").value = l?.forma_pagamento ?? "pix";
   el("m-fixo").value = l?.fixo_variavel ?? "variavel";
   el("m-parcelas").value = "1";
+  el("m-excluir").style.display = l ? "" : "none";
   preencherCategorias(l?.categoria_id); preencherSubcategorias(l?.subcategoria_id);
   preencherOnde(l ? (l.cartao_id ? "cartao-"+l.cartao_id : "conta-"+l.conta_id) : "conta-"+DB.contas[0]?.id);
   toggleParcelas();
@@ -817,21 +941,28 @@ async function marcarPaga(cartaoId, mesRef, pago){
   await recarregar();
 }
 
+/* Calcula as faturas de um cartão: venc ISO -> {avista, parc, assin} */
+function calcularFaturas(cartao){
+  const hoje = iso(new Date());
+  const fat = {};
+  DB.lancamentos.filter(l=>l.cartao_id===cartao.id && l.forma_pagamento?.startsWith("cr"))
+    .forEach(l=>{ const v = vencFatura(l.data, cartao); (fat[v]??={avista:0,parc:0,assin:0}).avista += +l.valor; });
+  DB.parcelas.filter(p=>p.cartao_id===cartao.id)
+    .forEach(p=>{ (fat[p.vencimento]??={avista:0,parc:0,assin:0}).parc += +p.valor; });
+  // Assinaturas: só PREVISÃO nas faturas futuras (não são lançamentos!)
+  DB.assinaturas.filter(a=>a.ativa && a.cartao_id===cartao.id).forEach(a=>{
+    cobrancasPrevistas(a).forEach(dt=>{
+      const v = vencFatura(dt, cartao);
+      if (v >= hoje) (fat[v]??={avista:0,parc:0,assin:0}).assin += +a.valor;
+    });
+  });
+  return fat;
+}
+
 function renderFaturas(){
   const hoje = iso(new Date());
   const html = DB.cartoes.map(cartao=>{
-    const fat = {}; // venc ISO -> {avista, parc, assin}
-    DB.lancamentos.filter(l=>l.cartao_id===cartao.id && l.forma_pagamento?.startsWith("cr"))
-      .forEach(l=>{ const v = vencFatura(l.data, cartao); (fat[v]??={avista:0,parc:0,assin:0}).avista += +l.valor; });
-    DB.parcelas.filter(p=>p.cartao_id===cartao.id)
-      .forEach(p=>{ (fat[p.vencimento]??={avista:0,parc:0,assin:0}).parc += +p.valor; });
-    // Assinaturas: só PREVISÃO nas faturas futuras (não são lançamentos!)
-    DB.assinaturas.filter(a=>a.ativa && a.cartao_id===cartao.id).forEach(a=>{
-      cobrancasPrevistas(a).forEach(dt=>{
-        const v = vencFatura(dt, cartao);
-        if (v >= hoje) (fat[v]??={avista:0,parc:0,assin:0}).assin += +a.valor;
-      });
-    });
+    const fat = calcularFaturas(cartao);
 
     const linhaDe = v => {
       const t = fat[v];
@@ -845,13 +976,18 @@ function renderFaturas(){
       const botao = paga
         ? `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', false)">Desfazer</button>`
         : `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', true)">Marcar como paga</button>`;
-      return `<tr class="${passada && paga ? "linha-passada" : ""}">
-        <td class="num">vence ${dBR(v)}</td>
-        <td class="dir num">${R$(t.avista)}</td>
-        <td class="dir num">${R$(t.parc)}</td>
-        <td class="dir num previsto">${t.assin ? R$(t.assin) : "—"}</td>
-        <td class="dir num" style="font-weight:700">${R$(t.avista+t.parc)}${t.assin ? `<div class="previsto" style="font-size:11.5px; font-weight:400">+ ${R$(t.assin)} previsto</div>` : ""}</td>
-        <td>${selo}</td><td class="dir">${botao}</td></tr>`;
+      const detalhes = [];
+      if (t.avista) detalhes.push(`à vista ${R$(t.avista)}`);
+      if (t.parc) detalhes.push(`parcelas ${R$(t.parc)}`);
+      if (t.assin) detalhes.push(`<span class="previsto">+ ${R$(t.assin)} previsto (assinaturas)</span>`);
+      return `<div class="fatura-item" style="${passada && paga ? "opacity:.6" : ""}">
+        <div class="fi-esq">
+          <div class="fi-venc">vence ${dBR(v)}</div>
+          <div class="fi-detalhe">${detalhes.join(" · ") || "sem gastos lançados"}</div>
+        </div>
+        <div class="fi-total num">${R$(t.avista+t.parc)}</div>
+        ${selo} ${botao}
+      </div>`;
     };
 
     const vencs = Object.keys(fat).sort();
@@ -859,22 +995,18 @@ function renderFaturas(){
     const futuras = vencs.filter(v=>v >= hoje);
     const atual = futuras[0];              // a próxima fatura a vencer = fatura do mês
     const proximas = futuras.slice(1);     // as demais ficam recolhidas
-    const cabecalho = `<thead><tr><th>Fatura</th><th class="dir">À vista no crédito</th><th class="dir">Parcelas</th><th class="dir">Assinaturas (previsto)</th><th class="dir">Total lançado</th><th>Status</th><th></th></tr></thead>`;
-    const tabAtual = atual
-      ? `<p style="font-size:12.5px; color:var(--texto-2); margin-bottom:6px">Fatura atual</p>
-         <table>${cabecalho}<tbody>${linhaDe(atual)}</tbody></table>`
+    const blocoAtual = atual
+      ? `<p class="mini-titulo">Fatura atual</p>${linhaDe(atual)}`
       : `<div class="vazio">Nenhuma fatura em aberto para este cartão.</div>`;
-    const tabProximas = proximas.length
-      ? `<details class="fatura-antiga"><summary>Próximas faturas (${proximas.length})</summary>
-          <table>${cabecalho}<tbody>${proximas.map(linhaDe).join("")}</tbody></table></details>`
+    const blocoProximas = proximas.length
+      ? `<details class="fatura-antiga"><summary>Próximas faturas (${proximas.length})</summary>${proximas.map(linhaDe).join("")}</details>`
       : "";
-    const tabPassadas = passadas.length
-      ? `<details class="fatura-antiga"><summary>Faturas de meses anteriores (${passadas.length})</summary>
-          <table>${cabecalho}<tbody>${passadas.slice().reverse().map(linhaDe).join("")}</tbody></table></details>`
+    const blocoPassadas = passadas.length
+      ? `<details class="fatura-antiga"><summary>Faturas de meses anteriores (${passadas.length})</summary>${passadas.slice().reverse().map(linhaDe).join("")}</details>`
       : "";
     return `<div class="painel">
       <h3>💳 ${cartao.nome} <span style="font-weight:400; color:var(--texto-2); font-size:13px">· fecha dia ${cartao.dia_fechamento} · vence dia ${cartao.dia_vencimento}</span></h3>
-      ${vencs.length ? tabAtual + tabProximas + tabPassadas
+      ${vencs.length ? blocoAtual + blocoProximas + blocoPassadas
         : `<div class="vazio">Nenhum gasto no crédito ainda. A primeira compra no cartão aparece aqui.</div>`}
     </div>`;
   }).join("");
