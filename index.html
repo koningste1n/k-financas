@@ -354,6 +354,7 @@
     <section class="aba" id="aba-assinaturas">
       <div class="titulo-aba"><h2>Assinaturas</h2></div>
       <div class="cards" id="kpis-assin"></div>
+      <div id="assin-pendentes"></div>
       <div class="painel">
         <h3 id="assin-form-titulo">+ Nova assinatura</h3>
         <input type="hidden" id="as-id">
@@ -698,6 +699,9 @@ function renderDashboardExtras(){
   el("dash-rapido").innerHTML = `
     <h3>⚡ Rápido</h3>
     <button class="btn" style="width:100%" onclick="abrirModal()">+ Novo lançamento</button>
+    ${assinaturasPendentes().length ? `<div style="margin-top:10px">
+      <span class="selo selo-prevista">🔁 ${assinaturasPendentes().length} cobrança(s) de assinatura para lançar</span>
+      <button class="link-aba" onclick="irParaAba('assinaturas')">Resolver →</button></div>` : ""}
     <p class="mini-titulo">Gastos nos últimos 7 dias</p>
     <div class="num" style="font-size:21px; font-weight:700">${R$(gastos7)}</div>
     <p class="mini-titulo">Últimos lançamentos</p>
@@ -905,28 +909,54 @@ async function salvarCartao(){
   await recarregar();
 }
 
-/* Datas de cobrança previstas de uma assinatura (só de hoje em diante, até ~12 meses) */
-function cobrancasPrevistas(a){
+/* Datas de cobrança de uma assinatura: dos últimos 60 dias até ~12 meses à frente */
+function cobrancasPrevistas(a, diasAtras = 60){
   const out = [];
   const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const janela = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()-diasAtras);
   const limite = new Date(hoje.getFullYear(), hoje.getMonth()+13, 0);
   const inicio = a.data_inicio ? pD(a.data_inicio) : hoje;
+  const minimo = inicio > janela ? inicio : janela;
   if (a.frequencia === "semanal"){
     const d = new Date(inicio);
-    while (d < hoje) d.setDate(d.getDate()+7);
+    while (d < minimo) d.setDate(d.getDate()+7);
     while (d <= limite){ out.push(iso(d)); d.setDate(d.getDate()+7); }
   } else if (a.frequencia === "anual"){
-    for (let k=0; k<2; k++){
+    for (let k=-1; k<=1; k++){
       const d = new Date(hoje.getFullYear()+k, inicio.getMonth(), a.dia_cobranca || inicio.getDate());
-      if (d >= hoje && d >= inicio && d <= limite) out.push(iso(d));
+      if (d >= minimo && d <= limite) out.push(iso(d));
     }
   } else { // mensal
-    for (let k=0; k<13; k++){
+    for (let k=-3; k<=13; k++){
       const d = new Date(hoje.getFullYear(), hoje.getMonth()+k, a.dia_cobranca || 1);
-      if (d >= hoje && d >= inicio && d <= limite) out.push(iso(d));
+      if (d >= minimo && d <= limite) out.push(iso(d));
     }
   }
   return out;
+}
+
+/* A cobrança desta data já virou lançamento? (mesmo valor, ±3 dias, nome parecido) */
+function cobrancaLancada(a, dt){
+  const d0 = pD(dt);
+  return DB.lancamentos.some(l=>{
+    if (l.tipo !== "despesa") return false;
+    if (Math.abs(+l.valor - +a.valor) > 0.01) return false;
+    if (a.cartao_id && l.cartao_id !== a.cartao_id) return false;
+    if (Math.abs(pD(l.data) - d0) > 3*24*3600*1000) return false;
+    return descricaoParecida(l.descricao, a.nome);
+  });
+}
+
+/* Cobranças que já chegaram no dia e ainda não foram lançadas */
+function assinaturasPendentes(){
+  const hojeISO = iso(new Date());
+  const out = [];
+  DB.assinaturas.filter(a=>a.ativa).forEach(a=>{
+    cobrancasPrevistas(a).forEach(dt=>{
+      if (dt <= hojeISO && !cobrancaLancada(a, dt)) out.push({ a, dt });
+    });
+  });
+  return out.sort((x,y)=>x.dt.localeCompare(y.dt));
 }
 
 function statusFatura(cartaoId, vencISO){
@@ -949,11 +979,12 @@ function calcularFaturas(cartao){
     .forEach(l=>{ const v = vencFatura(l.data, cartao); (fat[v]??={avista:0,parc:0,assin:0}).avista += +l.valor; });
   DB.parcelas.filter(p=>p.cartao_id===cartao.id)
     .forEach(p=>{ (fat[p.vencimento]??={avista:0,parc:0,assin:0}).parc += +p.valor; });
-  // Assinaturas: só PREVISÃO nas faturas futuras (não são lançamentos!)
+  // Assinaturas: previsão só do que AINDA NÃO virou lançamento
+  // (quando a cobrança real é lançada, ela sai do previsto e entra no "à vista")
   DB.assinaturas.filter(a=>a.ativa && a.cartao_id===cartao.id).forEach(a=>{
     cobrancasPrevistas(a).forEach(dt=>{
-      const v = vencFatura(dt, cartao);
-      if (v >= hoje) (fat[v]??={avista:0,parc:0,assin:0}).assin += +a.valor;
+      if (!cobrancaLancada(a, dt))
+        (fat[vencFatura(dt, cartao)]??={avista:0,parc:0,assin:0}).assin += +a.valor;
     });
   });
   return fat;
@@ -1202,6 +1233,23 @@ function renderAssinaturas(){
     .map(c=>`<option value="${c.id}" ${String(c.id)===catSel?"selected":""}>${c.nome}</option>`).join("");
   if (!el("as-sub").innerHTML) assinSubcats();
 
+  // Cobranças que já caíram e ainda não viraram lançamento
+  PENDENTES = assinaturasPendentes();
+  el("assin-pendentes").innerHTML = PENDENTES.length ? `<div class="painel">
+    <h3>⏰ Cobranças que já caíram — lançar agora?</h3>
+    <p style="font-size:13px; color:var(--texto-2); margin-bottom:8px">
+      Estas assinaturas chegaram no dia de cobrança e ainda não têm lançamento correspondente.
+      Ao lançar, cada uma vira um gasto real na fatura e <b>sai do "previsto"</b>.
+      Se alguma já foi registrada pelo bot ou pelo CSV com outro nome, desmarque para não duplicar.</p>
+    ${PENDENTES.map((p,i)=>`<label class="fatura-item" style="cursor:pointer">
+      <input type="checkbox" checked id="pend-${i}">
+      <div class="fi-esq"><div class="fi-venc">${p.a.nome}</div>
+        <div class="fi-detalhe">cobrança de ${dBR(p.dt)} · ${CARTAO[p.a.cartao_id]?.nome ?? "sem cartão"}</div></div>
+      <div class="fi-total num">${R$(+p.a.valor)}</div>
+    </label>`).join("")}
+    <div class="modal-acoes"><button class="btn" onclick="lancarPendentes()">Lançar selecionadas</button></div>
+  </div>` : "";
+
   const ativas = DB.assinaturas.filter(a=>a.ativa);
   const totalMes = ativas.reduce((s,a)=>s+custoMensal(a),0);
   el("kpis-assin").innerHTML = `
@@ -1259,6 +1307,23 @@ async function alternarAssinatura(id, ativa){
   await sb.from("assinaturas").update({ ativa }).eq("id", id);
   await recarregar();
 }
+let PENDENTES = [];
+async function lancarPendentes(){
+  const escolhidas = PENDENTES.filter((_,i)=>el("pend-"+i)?.checked);
+  if (!escolhidas.length){ alert("Nenhuma cobrança marcada."); return; }
+  const regs = escolhidas.map(({a, dt})=>({
+    data: dt, descricao: a.nome, tipo: "despesa",
+    categoria_id: a.categoria_id, subcategoria_id: a.subcategoria_id,
+    fixo_variavel: "fixo",
+    conta_id: null, cartao_id: a.cartao_id ?? null,
+    forma_pagamento: a.cartao_id ? "crédito" : "débito",
+    valor: +a.valor, origem: "assinatura",
+  }));
+  const { error } = await sb.from("lancamentos").insert(regs);
+  if (error){ alert("Erro ao lançar: "+error.message); return; }
+  await recarregar();
+  alert(`✅ ${regs.length} cobrança(s) lançada(s)! Elas saíram do "previsto" e entraram nas faturas e nos Lançamentos.`);
+}
 async function excluirAssinatura(id){
   const a = DB.assinaturas.find(x=>x.id===id);
   if (!confirm(`Apagar a assinatura "${a?.nome}" de vez?\n\nEla some das projeções de fatura. Os gastos reais já lançados NÃO são afetados.`)) return;
@@ -1274,16 +1339,70 @@ function renderConfig(){
     .map(c=>`<option value="${c.id}" ${String(c.id)===sel?"selected":""}>${c.nome}</option>`).join("");
   const GRUPO = { necessidades:"Necessidades", desejos:"Desejos", poupanca:"Poupança" };
   el("tabela-config").innerHTML = DB.categorias.map(c=>{
-    const subs = DB.subcategorias.filter(s=>s.categoria_id===c.id).map(s=>s.nome).join(", ");
+    const subs = DB.subcategorias.filter(s=>s.categoria_id===c.id)
+      .map(s=>`<span style="white-space:nowrap">${s.nome}<button class="acao" title="Renomear" style="font-size:11px; padding:1px 2px" onclick="renomearSub(${s.id})">✏️</button><button class="acao" title="Excluir" style="font-size:11px; padding:1px 2px" onclick="excluirSub(${s.id})">🗑️</button></span>`)
+      .join(" · ");
     return `<tr>
       <td><input type="color" value="${c.cor || "#8A05BE"}" title="Trocar a cor de ${c.nome}"
         onchange="salvarCorCategoria(${c.id}, this.value)"></td>
-      <td><span class="swatch" style="background:${c.cor || "#8A05BE"}"></span>${c.nome}</td>
+      <td><span class="swatch" style="background:${c.cor || "#8A05BE"}"></span>${c.nome}
+        <button class="acao" title="Renomear" onclick="renomearCategoria(${c.id})">✏️</button>
+        <button class="acao" title="Excluir" onclick="excluirCategoria(${c.id})">🗑️</button></td>
       <td>${c.tipo}</td>
       <td>${GRUPO[c.grupo_50_30_20] ?? "—"}</td>
       <td style="color:var(--texto-2); font-size:13px">${subs || "—"}</td>
     </tr>`;
   }).join("");
+}
+/* Quantos registros usam a categoria/subcategoria (proteção antes de excluir) */
+function usoCategoria(id){
+  return DB.lancamentos.filter(l=>l.categoria_id===id).length
+       + DB.compras.filter(c=>c.categoria_id===id).length
+       + DB.assinaturas.filter(a=>a.categoria_id===id).length
+       + DB.orcamentos.filter(o=>o.categoria_id===id).length;
+}
+function usoSub(id){
+  return DB.lancamentos.filter(l=>l.subcategoria_id===id).length
+       + DB.compras.filter(c=>c.subcategoria_id===id).length
+       + DB.assinaturas.filter(a=>a.subcategoria_id===id).length;
+}
+async function renomearCategoria(id){
+  const c = DB.categorias.find(x=>x.id===id); if (!c) return;
+  const nome = prompt("Novo nome da categoria:", c.nome);
+  if (!nome || !nome.trim() || nome.trim()===c.nome) return;
+  const { error } = await sb.from("categorias").update({ nome: nome.trim() }).eq("id", id);
+  if (error){ alert("Erro ao renomear: "+error.message); return; }
+  await recarregar(); // o bot já passa a usar o nome novo automaticamente
+}
+async function renomearSub(id){
+  const s = DB.subcategorias.find(x=>x.id===id); if (!s) return;
+  const nome = prompt("Novo nome da subcategoria:", s.nome);
+  if (!nome || !nome.trim() || nome.trim()===s.nome) return;
+  const { error } = await sb.from("subcategorias").update({ nome: nome.trim() }).eq("id", id);
+  if (error){ alert("Erro ao renomear: "+error.message); return; }
+  await recarregar();
+}
+async function excluirCategoria(id){
+  const c = DB.categorias.find(x=>x.id===id); if (!c) return;
+  const uso = usoCategoria(id);
+  if (uso){ alert(`Não dá para excluir "${c.nome}": ${uso} registro(s) (lançamentos, parceladas, assinaturas ou orçamentos) usam esta categoria.\n\nSe quiser, renomeie em vez de excluir — os registros antigos continuam certinhos.`); return; }
+  const subs = DB.subcategorias.filter(s=>s.categoria_id===id);
+  const subUsada = subs.find(s=>usoSub(s.id));
+  if (subUsada){ alert(`Não dá para excluir "${c.nome}": a subcategoria "${subUsada.nome}" ainda é usada em registros.`); return; }
+  if (!confirm(`Excluir a categoria "${c.nome}"${subs.length ? ` e suas ${subs.length} subcategoria(s)` : ""}? Nenhum registro usa ela, então é seguro.`)) return;
+  if (subs.length) await sb.from("subcategorias").delete().eq("categoria_id", id);
+  const { error } = await sb.from("categorias").delete().eq("id", id);
+  if (error){ alert("Erro ao excluir: "+error.message); return; }
+  await recarregar();
+}
+async function excluirSub(id){
+  const s = DB.subcategorias.find(x=>x.id===id); if (!s) return;
+  const uso = usoSub(id);
+  if (uso){ alert(`Não dá para excluir "${s.nome}": ${uso} registro(s) usam esta subcategoria. Renomeie em vez de excluir, se quiser.`); return; }
+  if (!confirm(`Excluir a subcategoria "${s.nome}"?`)) return;
+  const { error } = await sb.from("subcategorias").delete().eq("id", id);
+  if (error){ alert("Erro ao excluir: "+error.message); return; }
+  await recarregar();
 }
 async function salvarCorCategoria(id, cor){
   const { error } = await sb.from("categorias").update({ cor }).eq("id", id);
