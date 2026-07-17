@@ -255,7 +255,7 @@
         </table></div>
         <div class="lista-cards" id="cards-lanc"></div>
       </div>
-      <p style="color:var(--texto-2); font-size:13px">Parcelas de compras parceladas não aparecem aqui — elas ficam projetadas em <b>Cartões e Faturas</b>.</p>
+      <p style="color:var(--texto-2); font-size:13px">Parcelas aparecem na lista marcadas como <b>parcela N/N</b> no mês de cada vencimento. Para editar ou excluir uma compra parcelada, use a aba <b>Cartões</b>.</p>
     </section>
 
     <!-- ========== FATURAS ========== -->
@@ -274,10 +274,8 @@
       <div id="lista-faturas"></div>
       <div class="painel">
         <h3>🛒 Compras parceladas</h3>
-        <div style="overflow-x:auto"><table>
-          <thead><tr><th>Descrição</th><th>Cartão</th><th>Compra</th><th class="dir">Total</th><th>Parcelas</th><th></th></tr></thead>
-          <tbody id="lista-parceladas"></tbody>
-        </table></div>
+        <p style="font-size:12.5px; color:var(--texto-2); margin-bottom:6px">Clique numa compra para ver em qual fatura cai cada parcela.</p>
+        <div id="lista-parceladas"></div>
       </div>
     </section>
 
@@ -489,7 +487,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 /* ---------------- Estado ---------------- */
 let DB = {};                 // todas as tabelas carregadas
-let CAT = {}, SUB = {}, CONTA = {}, CARTAO = {};
+let CAT = {}, SUB = {}, CONTA = {}, CARTAO = {}, COMPRA = {};
 let periodo = { tipo: "mes", desloc: 0 };
 let charts = {};
 
@@ -557,6 +555,7 @@ async function carregarTudo(){
   SUB = Object.fromEntries(DB.subcategorias.map(s=>[s.id,s]));
   CONTA = Object.fromEntries(DB.contas.map(c=>[c.id,c]));
   CARTAO = Object.fromEntries(DB.cartoes.map(c=>[c.id,c]));
+  COMPRA = Object.fromEntries(DB.compras.map(c=>[c.id,c]));
 }
 
 /* Gastos "de verdade": despesas exceto pagamento de fatura, + parcelas projetadas */
@@ -774,7 +773,34 @@ function renderLanc(){
     (!fmes || l.data.slice(0,7)===fmes) && (!ftipo || l.tipo===ftipo) &&
     (!fcat || String(l.categoria_id)===fcat) &&
     (!busca || l.descricao?.toLowerCase().includes(busca)));
-  el("tabela-lanc").innerHTML = linhas.length ? linhas.map(l=>{
+
+  // Parcelas cujo vencimento cai no mês filtrado também aparecem (só leitura)
+  const parcelasMes = (!ftipo || ftipo==="despesa") ? DB.parcelas.filter(p=>{
+    const c = COMPRA[p.compra_id]; if (!c) return false;
+    if (fmes && p.vencimento.slice(0,7)!==fmes) return false;
+    if (fcat && String(c.categoria_id)!==fcat) return false;
+    if (busca && !(c.descricao||"").toLowerCase().includes(busca)) return false;
+    return true;
+  }) : [];
+
+  const itens = [
+    ...linhas.map(l=>({ ord:l.data, tipo:"lanc", l })),
+    ...parcelasMes.map(p=>({ ord:p.vencimento, tipo:"parc", p, c:COMPRA[p.compra_id] })),
+  ].sort((a,b)=>b.ord.localeCompare(a.ord));
+
+  el("tabela-lanc").innerHTML = itens.length ? itens.map(it=>{
+    if (it.tipo==="parc"){
+      const { p, c } = it;
+      return `<tr style="cursor:pointer" onclick="irParaAba('faturas')" title="Parcela — edite ou exclua na aba Cartões">
+        <td class="num">${dBR(p.vencimento)}</td>
+        <td>${c.descricao??""} <span class="pilula">parcela ${p.numero}/${c.num_parcelas}</span></td>
+        <td><span class="pilula">${CAT[c.categoria_id]?.nome??"—"}</span> <span style="color:var(--texto-2);font-size:12.5px">${SUB[c.subcategoria_id]?.nome??""}</span></td>
+        <td>💳 ${CARTAO[p.cartao_id]?.nome??""} <span style="color:var(--texto-2);font-size:12.5px">crédito</span></td>
+        <td class="dir num">− ${R$(+p.valor)}</td>
+        <td class="dir" style="color:var(--texto-2); font-size:12px">na fatura</td>
+      </tr>`;
+    }
+    const l = it.l;
     const onde = l.cartao_id ? "💳 "+(CARTAO[l.cartao_id]?.nome??"") : (CONTA[l.conta_id]?.nome??"—");
     return `<tr>
       <td class="num">${dBR(l.data)}</td>
@@ -786,7 +812,18 @@ function renderLanc(){
     </tr>`; }).join("")
     : `<tr><td colspan="6" class="vazio">Nenhum lançamento por aqui ainda. Mande um gasto pelo bot ou clique em “+ Novo lançamento”.</td></tr>`;
   // Versão celular: linha compacta, toque abre o boxe com todos os detalhes
-  el("cards-lanc").innerHTML = linhas.length ? linhas.map(l=>{
+  el("cards-lanc").innerHTML = itens.length ? itens.map(it=>{
+    if (it.tipo==="parc"){
+      const { p, c } = it;
+      return `<div class="item-lanc" onclick="irParaAba('faturas')">
+        <div style="min-width:0">
+          <div class="desc">${c.descricao || "Compra parcelada"} <span class="pilula">parcela ${p.numero}/${c.num_parcelas}</span></div>
+          <div class="meta">${dBR(p.vencimento).slice(0,5)} · ${CAT[c.categoria_id]?.nome??"—"} · 💳 ${CARTAO[p.cartao_id]?.nome??""}</div>
+        </div>
+        <div class="val num">− ${R$(+p.valor)}</div>
+      </div>`;
+    }
+    const l = it.l;
     const onde = l.cartao_id ? "💳 "+(CARTAO[l.cartao_id]?.nome??"") : (CONTA[l.conta_id]?.nome??"—");
     return `<div class="item-lanc" onclick="abrirModal(${l.id})">
       <div style="min-width:0">
@@ -935,14 +972,18 @@ function cobrancasPrevistas(a, diasAtras = 60){
   return out;
 }
 
-/* A cobrança desta data já virou lançamento? (mesmo valor, ±3 dias, nome parecido) */
+/* A cobrança desta data já virou lançamento?
+   Tolerância proposital: nome parecido + data ±4 dias + valor até 15% (ou R$ 5) diferente.
+   Motivo: assinaturas em dólar variam com câmbio/IOF (ex.: Claude), e errinhos de
+   digitação de centavos não podem fazer a cobrança "voltar" para pendente. */
 function cobrancaLancada(a, dt){
   const d0 = pD(dt);
+  const tolerancia = Math.max(5, +a.valor * 0.15);
   return DB.lancamentos.some(l=>{
     if (l.tipo !== "despesa") return false;
-    if (Math.abs(+l.valor - +a.valor) > 0.01) return false;
+    if (Math.abs(+l.valor - +a.valor) > tolerancia) return false;
     if (a.cartao_id && l.cartao_id !== a.cartao_id) return false;
-    if (Math.abs(pD(l.data) - d0) > 3*24*3600*1000) return false;
+    if (Math.abs(pD(l.data) - d0) > 4*24*3600*1000) return false;
     return descricaoParecida(l.descricao, a.nome);
   });
 }
@@ -1049,18 +1090,24 @@ function renderFaturas(){
 function renderParceladas(){
   const hoje = iso(new Date());
   el("lista-parceladas").innerHTML = DB.compras.length ? DB.compras.map(c=>{
-    const parcs = DB.parcelas.filter(p=>p.compra_id===c.id);
+    const parcs = DB.parcelas.filter(p=>p.compra_id===c.id)
+      .sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
     const restantes = parcs.filter(p=>p.vencimento>=hoje).length;
-    return `<tr>
-      <td>${c.descricao ?? ""}</td>
-      <td>${CARTAO[c.cartao_id]?.nome ?? "—"}</td>
-      <td class="num">${dBR(c.data_compra)}</td>
-      <td class="dir num">${R$(+c.valor_total)}</td>
-      <td class="num">${c.num_parcelas}x de ${R$(+c.valor_total/c.num_parcelas)} · faltam ${restantes}</td>
-      <td class="dir"><button class="acao" title="Apagar compra e todas as parcelas" onclick="excluirParcelada(${c.id})">🗑️</button></td>
-    </tr>`;
+    return `<details class="fatura-antiga">
+      <summary>${c.descricao ?? "Compra"} · ${CARTAO[c.cartao_id]?.nome ?? "—"} ·
+        <span class="num">${R$(+c.valor_total)}</span> em ${c.num_parcelas}x de
+        <span class="num">${R$(+c.valor_total/c.num_parcelas)}</span> · faltam ${restantes}
+        <button class="acao" title="Apagar compra e todas as parcelas"
+          onclick="event.preventDefault(); excluirParcelada(${c.id})">🗑️</button></summary>
+      <div class="fi-detalhe" style="margin:4px 0 2px">comprado em ${dBR(c.data_compra)} · ${CAT[c.categoria_id]?.nome ?? "sem categoria"}</div>
+      ${parcs.map(p=>`<div class="fatura-item" style="${p.vencimento<hoje?"opacity:.55":""}">
+        <div class="fi-esq"><div class="fi-venc">Parcela ${p.numero}/${c.num_parcelas}</div>
+          <div class="fi-detalhe">na fatura que vence ${dBR(p.vencimento)}${p.vencimento<hoje?" · já passou":""}</div></div>
+        <div class="fi-total num">${R$(+p.valor)}</div>
+      </div>`).join("")}
+    </details>`;
   }).join("")
-  : `<tr><td colspan="6" class="vazio">Nenhuma compra parcelada. Registre pelo bot ou pelo "+ Novo lançamento" (crédito + parcelado).</td></tr>`;
+  : `<div class="vazio">Nenhuma compra parcelada. Registre pelo bot ou pelo "+ Novo lançamento" (crédito + parcelado).</div>`;
 }
 async function excluirParcelada(id){
   const c = DB.compras.find(x=>x.id===id);
