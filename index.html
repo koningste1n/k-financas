@@ -284,6 +284,11 @@
       <div class="titulo-aba"><h2>Contas e saldos</h2></div>
       <div class="cards" id="lista-contas"></div>
       <p style="color:var(--texto-2); font-size:13px">Saldo = saldo inicial + receitas − despesas pagas pela conta (pix, débito, dinheiro e pagamento de fatura). Compras no crédito não mexem no saldo até a fatura ser paga.</p>
+      <div class="painel">
+        <h3>🧮 Conferência de saldo (fechamento do mês)</h3>
+        <p style="font-size:13px; color:var(--texto-2); margin-bottom:10px">Uma vez por mês, abra o app do banco e digite aqui o saldo real de cada conta. Se a diferença não for R$ 0,00, algum lançamento está faltando, sobrando ou com valor errado — importe o extrato CSV do período para achar. É esse ritual que mantém os gráficos confiáveis.</p>
+        <div id="conferencia-contas"></div>
+      </div>
     </section>
 
     <!-- ========== ORÇAMENTO ========== -->
@@ -437,6 +442,14 @@
         </div>
       </div>
       <div class="painel">
+        <h3>💾 Backup e exportação</h3>
+        <p style="font-size:13px; color:var(--texto-2); margin-bottom:10px">Seus dados são seus. O CSV abre no Excel/Planilhas; o backup completo guarda TODAS as tabelas num arquivo só (bom hábito: baixe um por mês e guarde).</p>
+        <div class="form-linha">
+          <button class="btn btn-claro" onclick="exportarLancamentosCSV()">⬇️ Exportar lançamentos (CSV)</button>
+          <button class="btn btn-claro" onclick="exportarBackupJSON()">⬇️ Backup completo (JSON)</button>
+        </div>
+      </div>
+      <div class="painel">
         <h3>Minhas categorias</h3>
         <div style="overflow-x:auto"><table>
           <thead><tr><th>Cor</th><th>Categoria</th><th>Tipo</th><th>Grupo 50/30/20</th><th>Subcategorias</th></tr></thead>
@@ -494,7 +507,10 @@ let charts = {};
 /* ---------------- Ajudantes ---------------- */
 const R$ = v => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const pD = s => new Date(s + "T12:00:00");
-const iso = d => d.toISOString().slice(0, 10);
+/* Data no fuso LOCAL (não UTC!). Com toISOString(), qualquer lançamento
+   feito depois das 21h no Brasil caía no dia seguinte — fatura, mês e
+   50/30/20 errados. Este helper usa o calendário do seu computador/celular. */
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const dBR = s => { const [a,m,d] = s.split("-"); return `${d}/${m}/${a}`; };
 const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
 const mesBR = s => MESES[+s.slice(5,7)-1] + "/" + s.slice(2,4);
@@ -1006,9 +1022,13 @@ function statusFatura(cartaoId, vencISO){
   const mesRef = vencISO.slice(0,7) + "-01";
   return DB.faturas.find(f=>f.cartao_id===cartaoId && f.mes_referencia===mesRef) ?? null;
 }
-async function marcarPaga(cartaoId, mesRef, pago){
+async function marcarPaga(cartaoId, mesRef, pago, valorAtual){
+  // Ao pagar, o valor da fatura é CONGELADO em valor_pago — se lançamentos
+  // antigos mudarem depois, o histórico continua fiel ao que você pagou.
   const { error } = await sb.from("faturas").upsert(
-    { cartao_id: cartaoId, mes_referencia: mesRef, pago, data_pagamento: pago ? iso(new Date()) : null },
+    { cartao_id: cartaoId, mes_referencia: mesRef, pago,
+      data_pagamento: pago ? iso(new Date()) : null,
+      valor_pago: pago ? (valorAtual ?? null) : null },
     { onConflict: "cartao_id,mes_referencia" });
   if (error){ alert("Erro ao atualizar a fatura: "+error.message); return; }
   await recarregar();
@@ -1044,22 +1064,27 @@ function renderFaturas(){
       const st = statusFatura(cartao.id, v);
       const paga = !!st?.pago;
       const mesRef = v.slice(0,7)+"-01";
+      const totalCalc = t.avista + t.parc;
+      const congelado = paga && st?.valor_pago != null ? +st.valor_pago : null;
+      const totalMostrado = congelado ?? totalCalc;
+      const divergiu = congelado != null && Math.abs(congelado - totalCalc) > 0.01;
       const selo = paga
         ? `<span class="selo selo-paga">Paga${st?.data_pagamento ? " em "+dBR(st.data_pagamento) : ""}</span>`
         : `<span class="selo selo-aberta">Em aberto</span>`;
       const botao = paga
         ? `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', false)">Desfazer</button>`
-        : `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', true)">Marcar como paga</button>`;
+        : `<button class="btn-mini" onclick="marcarPaga(${cartao.id}, '${mesRef}', true, ${totalCalc.toFixed(2)})">Marcar como paga</button>`;
       const detalhes = [];
       if (t.avista) detalhes.push(`à vista ${R$(t.avista)}`);
       if (t.parc) detalhes.push(`parcelas ${R$(t.parc)}`);
       if (t.assin) detalhes.push(`<span class="previsto">+ ${R$(t.assin)} previsto (assinaturas)</span>`);
+      if (divergiu) detalhes.push(`<span style="color:var(--amarelo)">⚠️ valor pago congelado; cálculo de hoje: ${R$(totalCalc)}</span>`);
       return `<div class="fatura-item" style="${passada && paga ? "opacity:.6" : ""}">
         <div class="fi-esq">
           <div class="fi-venc">vence ${dBR(v)}</div>
           <div class="fi-detalhe">${detalhes.join(" · ") || "sem gastos lançados"}</div>
         </div>
-        <div class="fi-total num">${R$(t.avista+t.parc)}</div>
+        <div class="fi-total num" title="Soma dos gastos à vista no crédito + parcelas desta fatura. Assinaturas previstas só entram quando viram lançamento.">${R$(totalMostrado)}</div>
         ${selo} ${botao}
       </div>`;
     };
@@ -1132,6 +1157,35 @@ function renderContas(){
       <div style="font-size:12.5px; color:var(--texto-2); margin-top:4px" class="num">início ${R$(+c.saldo_inicial)} · +${R$(rec)} · −${R$(desp)}</div>
     </div>`;
   }).join("");
+
+  // Conferência: saldo do app × saldo real do banco
+  el("conferencia-contas").innerHTML = DB.contas.map(c=>{
+    const rec = DB.lancamentos.filter(l=>l.conta_id===c.id && l.tipo==="receita").reduce((s,l)=>s+ +l.valor,0);
+    const desp = DB.lancamentos.filter(l=>l.conta_id===c.id && l.tipo==="despesa").reduce((s,l)=>s+ +l.valor,0);
+    const saldo = +c.saldo_inicial + rec - desp;
+    return `<div class="fatura-item">
+      <div class="fi-esq">
+        <div class="fi-venc">${c.nome}</div>
+        <div class="fi-detalhe">saldo no app: <span class="num">${R$(saldo)}</span></div>
+      </div>
+      <input type="number" step="0.01" placeholder="saldo real no banco" style="width:170px"
+        oninput="conferirSaldo(this, ${saldo.toFixed(2)})">
+      <div class="fi-total num" style="min-width:130px; text-align:right; color:var(--texto-2)">digite ao lado</div>
+    </div>`;
+  }).join("") || `<div class="vazio">Cadastre uma conta para conferir o saldo.</div>`;
+}
+function conferirSaldo(input, saldoApp){
+  const alvo = input.parentElement.querySelector(".fi-total");
+  if (input.value === ""){ alvo.textContent = "digite ao lado"; alvo.style.color = "var(--texto-2)"; return; }
+  const dif = +input.value - saldoApp;
+  if (Math.abs(dif) <= 0.005){
+    alvo.textContent = "✓ bateu!"; alvo.style.color = "var(--verde)";
+  } else {
+    alvo.textContent = `${dif > 0 ? "+" : "−"} ${R$(Math.abs(dif))}`;
+    alvo.style.color = "var(--vermelho)";
+    alvo.title = dif > 0 ? "O banco tem MAIS que o app: falta registrar receita ou tem despesa a mais aqui."
+                         : "O banco tem MENOS que o app: falta registrar alguma despesa aqui.";
+  }
 }
 async function editarSaldo(id){
   const atual = CONTA[id].saldo_inicial;
@@ -1670,6 +1724,40 @@ function renderImportar(){
   el("imp-onde").innerHTML =
     DB.contas.map(c=>`<option value="conta-${c.id}">Conta · ${c.nome}</option>`).join("") +
     DB.cartoes.map(c=>`<option value="cartao-${c.id}">Cartão · ${c.nome}</option>`).join("");
+}
+
+/* ---------------- Backup e exportação ---------------- */
+function baixarArquivoLocal(nome, conteudo, tipo){
+  const blob = new Blob([conteudo], { type: tipo });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function exportarLancamentosCSV(){
+  const esc = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
+  const cab = ["data","descricao","tipo","categoria","subcategoria","conta_ou_cartao","forma_pagamento","valor","origem"];
+  const linhas = DB.lancamentos.map(l=>[
+    l.data, l.descricao ?? "", l.tipo,
+    CAT[l.categoria_id]?.nome ?? "", SUB[l.subcategoria_id]?.nome ?? "",
+    l.cartao_id ? (CARTAO[l.cartao_id]?.nome ?? "") : (CONTA[l.conta_id]?.nome ?? ""),
+    l.forma_pagamento ?? "", String(+l.valor).replace(".",","), l.origem ?? "",
+  ].map(esc).join(";"));
+  const compras = DB.compras.map(c=>[
+    c.data_compra, `${c.descricao ?? ""} (${c.num_parcelas}x)`, "despesa",
+    CAT[c.categoria_id]?.nome ?? "", SUB[c.subcategoria_id]?.nome ?? "",
+    CARTAO[c.cartao_id]?.nome ?? "", "crédito",
+    String(+c.valor_total).replace(".",","), "parcelada",
+  ].map(esc).join(";"));
+  // \ufeff = BOM, faz o Excel abrir acentos certinho
+  const csv = "\ufeff" + [cab.join(";"), ...linhas, ...compras].join("\n");
+  baixarArquivoLocal(`k-financas-lancamentos-${iso(new Date())}.csv`, csv, "text/csv;charset=utf-8");
+}
+function exportarBackupJSON(){
+  const backup = { exportado_em: new Date().toString(), app: "K Finanças", dados: DB };
+  baixarArquivoLocal(`k-financas-backup-${iso(new Date())}.json`,
+    JSON.stringify(backup, null, 2), "application/json");
 }
 
 /* ---------------- Navegação e inicialização ---------------- */
