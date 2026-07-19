@@ -255,7 +255,7 @@
         </table></div>
         <div class="lista-cards" id="cards-lanc"></div>
       </div>
-      <p style="color:var(--texto-2); font-size:13px">Parcelas aparecem na lista marcadas como <b>parcela N/N</b> no mês de cada vencimento. Para editar ou excluir uma compra parcelada, use a aba <b>Cartões</b>.</p>
+      <p style="color:var(--texto-2); font-size:13px">Compras parceladas aparecem na <b>data da compra</b>, marcadas como <b>parcela 1/N</b> com o valor da parcela. As parcelas seguintes ficam nas faturas — veja o cronograma completo na aba <b>Cartões</b>, onde também dá para editar ou excluir a compra.</p>
     </section>
 
     <!-- ========== FATURAS ========== -->
@@ -774,10 +774,10 @@ function renderLanc(){
     (!fcat || String(l.categoria_id)===fcat) &&
     (!busca || l.descricao?.toLowerCase().includes(busca)));
 
-  // Parcelas cujo vencimento cai no mês filtrado também aparecem (só leitura)
-  const parcelasMes = (!ftipo || ftipo==="despesa") ? DB.parcelas.filter(p=>{
-    const c = COMPRA[p.compra_id]; if (!c) return false;
-    if (fmes && p.vencimento.slice(0,7)!==fmes) return false;
+  // Compras parceladas aparecem na DATA DA COMPRA, como "parcela 1/N"
+  // (as parcelas seguintes não entram no diário — elas vivem nas faturas e no cronograma em Cartões)
+  const comprasMes = (!ftipo || ftipo==="despesa") ? DB.compras.filter(c=>{
+    if (fmes && c.data_compra.slice(0,7)!==fmes) return false;
     if (fcat && String(c.categoria_id)!==fcat) return false;
     if (busca && !(c.descricao||"").toLowerCase().includes(busca)) return false;
     return true;
@@ -785,18 +785,19 @@ function renderLanc(){
 
   const itens = [
     ...linhas.map(l=>({ ord:l.data, tipo:"lanc", l })),
-    ...parcelasMes.map(p=>({ ord:p.vencimento, tipo:"parc", p, c:COMPRA[p.compra_id] })),
+    ...comprasMes.map(c=>({ ord:c.data_compra, tipo:"parc", c })),
   ].sort((a,b)=>b.ord.localeCompare(a.ord));
 
   el("tabela-lanc").innerHTML = itens.length ? itens.map(it=>{
     if (it.tipo==="parc"){
-      const { p, c } = it;
-      return `<tr style="cursor:pointer" onclick="irParaAba('faturas')" title="Parcela — edite ou exclua na aba Cartões">
-        <td class="num">${dBR(p.vencimento)}</td>
-        <td>${c.descricao??""} <span class="pilula">parcela ${p.numero}/${c.num_parcelas}</span></td>
+      const c = it.c;
+      const vParc = +c.valor_total / c.num_parcelas;
+      return `<tr style="cursor:pointer" onclick="irParaAba('faturas')" title="Compra parcelada — edite ou exclua na aba Cartões">
+        <td class="num">${dBR(c.data_compra)}</td>
+        <td>${c.descricao??""} <span class="pilula">parcela 1/${c.num_parcelas}</span></td>
         <td><span class="pilula">${CAT[c.categoria_id]?.nome??"—"}</span> <span style="color:var(--texto-2);font-size:12.5px">${SUB[c.subcategoria_id]?.nome??""}</span></td>
-        <td>💳 ${CARTAO[p.cartao_id]?.nome??""} <span style="color:var(--texto-2);font-size:12.5px">crédito</span></td>
-        <td class="dir num">− ${R$(+p.valor)}</td>
+        <td>💳 ${CARTAO[c.cartao_id]?.nome??""} <span style="color:var(--texto-2);font-size:12.5px">crédito</span></td>
+        <td class="dir num">− ${R$(vParc)}</td>
         <td class="dir" style="color:var(--texto-2); font-size:12px">na fatura</td>
       </tr>`;
     }
@@ -814,13 +815,14 @@ function renderLanc(){
   // Versão celular: linha compacta, toque abre o boxe com todos os detalhes
   el("cards-lanc").innerHTML = itens.length ? itens.map(it=>{
     if (it.tipo==="parc"){
-      const { p, c } = it;
+      const c = it.c;
+      const vParc = +c.valor_total / c.num_parcelas;
       return `<div class="item-lanc" onclick="irParaAba('faturas')">
         <div style="min-width:0">
-          <div class="desc">${c.descricao || "Compra parcelada"} <span class="pilula">parcela ${p.numero}/${c.num_parcelas}</span></div>
-          <div class="meta">${dBR(p.vencimento).slice(0,5)} · ${CAT[c.categoria_id]?.nome??"—"} · 💳 ${CARTAO[p.cartao_id]?.nome??""}</div>
+          <div class="desc">${c.descricao || "Compra parcelada"} <span class="pilula">parcela 1/${c.num_parcelas}</span></div>
+          <div class="meta">${dBR(c.data_compra).slice(0,5)} · ${CAT[c.categoria_id]?.nome??"—"} · 💳 ${CARTAO[c.cartao_id]?.nome??""}</div>
         </div>
-        <div class="val num">− ${R$(+p.valor)}</div>
+        <div class="val num">− ${R$(vParc)}</div>
       </div>`;
     }
     const l = it.l;
